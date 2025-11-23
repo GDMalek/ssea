@@ -55,12 +55,27 @@
         async function initializeFirebase() {
             const loadingEl = document.getElementById('page-loading-message');
             
+            // Check for missing configuration (Common when run outside Canvas)
             if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
-                loadingEl.innerHTML = '<h1 class="text-2xl font-bold text-red-700">Configuration Error</h1><p class="text-red-500">Firebase keys are missing or invalid.</p>';
+                const message = `
+                    <h1 class="text-3xl font-bold text-red-700">⚠️ Configuration Error ⚠️</h1>
+                    <p class="text-xl text-red-500 mt-3">Firebase keys are missing or invalid.</p>
+                    <p class="text-lg text-gray-700 mt-4">
+                        This is expected if you are running the file locally or from GitHub. 
+                        The app requires the <code>__firebase_config</code> variable provided by the Canvas environment.
+                    </p>
+                    <p class="text-lg text-gray-700 mt-2">
+                        To run externally, you must manually replace the <code>firebaseConfig = {}</code> placeholder 
+                        with your own Firebase project configuration object.
+                    </p>
+                `;
+                loadingEl.innerHTML = message;
                 isFirebaseReady = false;
+                updateEntryFormState(false, "Configuration Error: Needs Firebase Keys");
                 return false;
             }
             
+            // Proceed with initialization
             try {
                 loadingEl.innerHTML = '<h1 class="text-3xl font-extrabold text-blue-700">Loading Fun! 🚀</h1><p class="text-lg text-blue-500 mt-2">Connecting to the Super Star Academy...</p>';
                 app = initializeApp(firebaseConfig);
@@ -77,12 +92,12 @@
                 // Set up listener and mark ready
                 setupAuthListener();
                 isFirebaseReady = true;
-                loadingEl.textContent = 'Ready.'; 
-                updateEntryFormState(false); // Initial state: Disable until auth state is known
+                // Note: Entry form state is handled by the onAuthStateChanged listener now.
                 return true;
             } catch (error) {
                 loadingEl.innerHTML = `<h1 class="text-3xl font-extrabold text-red-700">Oops! Connection Failed 😔</h1><p class="text-red-500 mt-2">Error: ${error.message}. Please refresh.</p>`;
                 isFirebaseReady = false;
+                updateEntryFormState(false, "Connection Failed");
                 return false;
             }
         }
@@ -242,8 +257,9 @@
         /**
          * Manages the disabled/enabled state of the entry form elements.
          * @param {boolean} isReady True to enable the form (authentication complete), False to disable.
+         * @param {string} [loadingText] Optional text to show when not ready.
          */
-        function updateEntryFormState(isReady) {
+        function updateEntryFormState(isReady, loadingText = 'Connecting to Adventure... ⏳') {
             const button = document.getElementById('entry-submit-button');
             const inputs = [
                 document.getElementById('entry-rollno'),
@@ -259,7 +275,7 @@
                     button.classList.add('hover:bg-red-600');
                 } else {
                     button.disabled = true;
-                    button.textContent = 'Connecting to Adventure... ⏳';
+                    button.textContent = loadingText;
                     button.classList.add('opacity-50', 'cursor-not-allowed');
                     button.classList.remove('hover:bg-red-600');
                 }
@@ -337,6 +353,11 @@
 
         function setupAuthListener() {
             onAuthStateChanged(auth, async (user) => {
+                if (!isFirebaseReady) {
+                    // Prevent UI action if firebase setup itself failed due to config
+                    return;
+                }
+
                 if (user) {
                     currentUser = user;
                     const foundData = await findStudentByAuthId(user.uid); 
@@ -354,14 +375,14 @@
                         updateDashboardUI();
                         showPage('page-dashboard'); // Land directly on dashboard on reload
                     } else {
-                        updateEntryFormState(true); // User authenticated, but data not found. Enable form for registration.
+                        updateEntryFormState(true, 'Start My Adventure! 🚀'); // User authenticated, but data not found. Enable form for registration.
                         showPage('page-entry');
                     }
                 } else {
                     currentUser = null;
                     currentStudentData = null;
                     studentDocId = null;
-                    updateEntryFormState(false); // Not authenticated, keep form disabled.
+                    updateEntryFormState(false, 'Waiting for Secure Connection...'); // Not authenticated, keep form disabled.
                     showPage('page-entry');
                 }
             });
@@ -762,6 +783,7 @@
         }
 
         function endPress() {
+            const scoreboardButton = document.getElementById('dashboard-scoreboard-button');
             clearTimeout(pressTimer);
         }
 
@@ -834,7 +856,7 @@
 
             <!-- PAGE: LOADING -->
             <div id="page-loading" class="text-center">
-                <div id="page-loading-message"> 
+                <div id="page-loading-message" class="bg-yellow-100 p-8 rounded-xl shadow-lg border-2 border-yellow-400"> 
                     <!-- Content replaced by JS in initializeFirebase -->
                     <h1 class="text-3xl font-extrabold text-blue-700">Loading Fun! 🚀</h1>
                     <p class="text-lg text-blue-500 mt-2">Connecting to the Super Star Academy...</p>
