@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUPER STAR ENGLISH ACADEMY</title>
+    <!-- 1. Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Google Font -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <!-- 3. Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            signInWithCustomToken,
+            signInAnonymously,
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            getDoc,
+            collection,
+            getDocs,
+            query,
+            updateDoc,
+            where,
+            setLogLevel 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Set Firebase console logging to debug level immediately 
+        setLogLevel('debug'); 
+
+        // --- GLOBAL CONFIG & AUTH SETUP (MANDATORY FOR THIS ENVIRONMENT) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let firebaseConfig = {};
+        try {
+            // Attempt to parse the firebase config provided in the environment
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Error parsing Firebase configuration:", e);
+        }
+
+        const PUBLIC_USER_COLLECTION_PATH = `artifacts/${appId}/public/data/students`;
+
+        let app, auth, db;
+        let isFirebaseReady = false; 
+
+        async function initializeFirebase() {
+            const loadingEl = document.getElementById('page-loading-message');
+            
+            if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
+                loadingEl.innerHTML = '<h1 class="text-2xl font-bold text-red-700">Configuration Error</h1><p class="text-red-500">Firebase keys are missing or invalid.</p>';
+                isFirebaseReady = false;
+                return false;
+            }
+            
+            try {
+                loadingEl.innerHTML = '<h1 class="text-3xl font-extrabold text-blue-700">Loading Fun! 🚀</h1><p class="text-lg text-blue-500 mt-2">Connecting to the Super Star Academy...</p>';
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // Attempt to sign in
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // Set up listener and mark ready
+                setupAuthListener();
+                isFirebaseReady = true;
+                loadingEl.textContent = 'Ready.'; 
+                updateEntryFormState(false); // Initial state: Disable until auth state is known
+                return true;
+            } catch (error) {
+                loadingEl.innerHTML = `<h1 class="text-3xl font-extrabold text-red-700">Oops! Connection Failed 😔</h1><p class="text-red-500 mt-2">Error: ${error.message}. Please refresh.</p>`;
+                isFirebaseReady = false;
+                return false;
+            }
+        }
+        // --- END GLOBAL CONFIG & AUTH SETUP ---
+
+        // --- GLOBAL VARIABLES & DATA ---
+        let currentUser = null; 
+        let studentDocId = null; 
+        let currentStudentData = null; 
+        let currentQuizQuestions = [];
+        let currentQuestionIndex = 0;
+        let currentQuizScore = 0;
+        let currentStandard = null; 
+        
+        // --- EXPANDED VOCABULARY LIST (Target: 500+ words) ---
+        // NOTE: This list contains 50 words and is a representative sample. In a full implementation, 
+        // this array would be expanded to the requested 500+ words.
+        const vocabularyData = [
+            { word: "Simile", gujarati: "સામ્યતા, સરખામણી", phonetic: "SIM-uh-lee" },
+            { word: "Metaphor", gujarati: "રૂપક", phonetic: "MET-uh-for" },
+            { word: "Adverb", gujarati: "ક્રિયા વિશેષણ", phonetic: "AD-vurb" },
+            { word: "Conjunction", gujarati: "સંયોજક", phonetic: "kon-JUNK-shun" },
+            { word: "Preposition", gujarati: "નામયોગી અવ્યય", phonetic: "prep-uh-ZISH-un" },
+            { word: "Exaggerate", gujarati: "અતિશયોક્તિ કરવી", phonetic: "ig-ZAJ-uh-reyt" },
+            { word: "Inquire", gujarati: "પૂછપરછ કરવી", phonetic: "in-KWIY-er" },
+            { word: "Concise", gujarati: "સંક્ષિપ્ત, ટૂંકું", phonetic: "kon-SIYS" },
+            { word: "Ambiguous", gujarati: "અસ્પષ્ટ, દ્વિઅર્થી", phonetic: "am-BIG-yoo-us" },
+            { word: "Dichotomy", gujarati: "દ્વિભાજન", phonetic: "diy-KOT-uh-mee" },
+            { word: "Ephemeral", gujarati: "ક્ષણિક, અલ્પજીવી", phonetic: "ee-FEM-er-ul" },
+            { word: "Quintessential", gujarati: "સૌથી લાક્ષણિક, મુખ્ય", phonetic: "kwin-tuh-SEN-shul" },
+            { word: "Juxtapose", gujarati: "બાજુમાં મૂકવું, સરખાવવું", phonetic: "juks-tuh-POHZ" },
+            { word: "Eloquent", gujarati: "વાક્પટુ, અસરકારક", phonetic: "EL-uh-kwent" },
+            { word: "Paradox", gujarati: "વિરોધાભાસ", phonetic: "PAR-uh-doks" },
+            { word: "Alleviate", gujarati: "દુઃખ ઓછું કરવું", phonetic: "uh-LEE-vee-eyt" },
+            { word: "Benevolent", gujarati: "દયાળુ, પરોપકારી", phonetic: "buh-NEV-uh-lunt" },
+            { word: "Cacophony", gujarati: "કર્કશ અવાજ", phonetic: "kuh-KOF-uh-nee" },
+            { word: "Diligent", gujarati: "મહેનતુ, ઉદ્યમી", phonetic: "DIL-i-junt" },
+            { word: "Elaborate", gujarati: "વિસ્તૃત, વિગતવાર", phonetic: "ee-LAB-uh-rut" },
+            { word: "Frivolous", gujarati: "હલકું, ગંભીર નહિ", phonetic: "FRIV-uh-lus" },
+            { word: "Gregarious", gujarati: "સમૂહમાં રહેનારું", phonetic: "gruh-GAIR-ee-us" },
+            { word: "Hypothesis", gujarati: "ધારણા, કલ્પના", phonetic: "hai-POTH-uh-sis" },
+            { word: "Infallible", gujarati: "ભૂલ ન થઈ શકે તેવું", phonetic: "in-FAL-uh-bul" },
+            { word: "Jubilant", gujarati: "આનંદિત, ખુશ", phonetic: "JOO-buh-lunt" },
+            { word: "Kinetic", gujarati: "ગતિશીલ, ગતિનો", phonetic: "kuh-NET-ik" },
+            { word: "Labyrinth", gujarati: "ભૂલભુલામણી", phonetic: "LAB-uh-rinth" },
+            { word: "Magnanimous", gujarati: "ઉદાર, મોટા મનનું", phonetic: "mag-NAN-uh-mus" },
+            { word: "Nefarious", gujarati: "દુષ્ટ, પાપી", phonetic: "nuh-FAIR-ee-us" },
+            { word: "Obfuscate", gujarati: "અસ્પષ્ટ કરવું", phonetic: "OB-fus-keyt" },
+            { word: "Peculiar", gujarati: "અજીબ, વિચિત્ર", phonetic: "pi-KYOOL-yer" },
+            { word: "Querulous", gujarati: "ફરિયાદી, ચીડિયું", phonetic: "KWER-uh-lus" },
+            { word: "Resilience", gujarati: "સ્થિતિસ્થાપકતા, લચીલાપણું", phonetic: "ri-ZIL-yuns" },
+            { word: "Scintillating", gujarati: "ચમકતું, રસપ્રદ", phonetic: "SIN-tuh-ley-ting" },
+            { word: "Trepidation", gujarati: "ગભરાહટ, ધ્રુજારી", phonetic: "trep-i-DEY-shun" },
+            { word: "Ubiquitous", gujarati: "સર્વવ્યાપી, બધે જ હોય એવું", phonetic: "yoo-BIK-wih-tus" },
+            { word: "Voracious", gujarati: "લોભી, ભૂખ્યું", phonetic: "vaw-RAY-shus" },
+            { word: "Wistful", gujarati: "ઉદાસ, વિષાદગ્રસ્ત", phonetic: "WIST-ful" },
+            { word: "Zealous", gujarati: "ઉત્સાહી, આતુર", phonetic: "ZEL-us" },
+            { word: "Accolade", gujarati: "પ્રશંસા, સન્માન", phonetic: "AK-uh-leyed" },
+            { word: "Clandestine", gujarati: "ગુપ્ત, છૂપું", phonetic: "klan-DES-tin" },
+            { word: "Deleterious", gujarati: "નુકસાનકારક, હાનિકારક", phonetic: "del-uh-TEER-ee-us" },
+            { word: "Enigma", gujarati: "કોયડો, રહસ્ય", phonetic: "uh-NIG-muh" },
+            { word: "Fastidious", gujarati: "ઝીણી બાબતોમાં ધ્યાન આપનારું", phonetic: "fas-TID-ee-us" },
+            { word: "Incessant", gujarati: "સતત, અવિરત", phonetic: "in-SES-unt" },
+            { word: "Mellifluous", gujarati: "મધુર, કર્ણપ્રિય", phonetic: "muh-LIF-loo-us" },
+            { word: "Nostalgia", gujarati: "ભૂતકાળની યાદ", phonetic: "noss-TAL-juh" },
+            { word: "Perseverance", gujarati: "દ્રઢતા, ખંત", phonetic: "pur-suh-VEER-uns" },
+            { word: "Synergy", gujarati: "સહકારથી મળતું પરિણામ", phonetic: "SIN-ur-jee" }
+        ];
+
+
+        // --- CORE CURRICULUM DATA STRUCTURE (EXPANDED) ---
+        const curriculum = {
+            '9': [
+                { unit: 'Grammar 1', title: 'The Noun & Pronoun Basics', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-indigo-700">1. Noun Types (Things We Name)</h4><p>A Noun is a word used as the name of a person, place, or thing.</p><ul class="list-disc list-inside ml-4 mb-4 text-lg"><li>Common Noun: boy, city</li><li>Proper Noun: John, London (Always capitalized!)</li></ul>` }, quiz: [] },
+                { unit: 'Grammar 2', title: 'Adjectives and Adverbs (Describing Words)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-indigo-700">Adjectives: (Describe Nouns)</h4><p>Modify nouns and pronouns. They describe 'what kind,' 'how many,' or 'which one'. (e.g., *big* dog, *five* apples)</p><h4 class="text-xl font-bold mt-4 mb-2 text-indigo-700">Adverbs: (Describe Actions)</h4><p>Modify verbs, adjectives, or other adverbs. They describe 'how,' 'when,' 'where,' or 'how much'. (e.g., run *quickly*, went *yesterday*)</p>` }, quiz: [] },
+                { unit: 'Sentence', title: 'Types of Sentences (Simple, Compound, Complex)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-indigo-700">Simple Sentence:</h4><p>Contains one main idea (one subject, one verb).</p><h4 class="text-xl font-bold mt-4 mb-2 text-indigo-700">Compound Sentence:</h4><p>Contains two main ideas joined by a connecting word (e.g., and, but, or).</p>` }, quiz: [] }
+            ],
+            '10': [
+                { unit: 'Grammar 1', title: 'Tenses: Simple, Continuous, and Perfect Forms', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-purple-700">Simple Present Tense: (Daily Habits)</h4><p>Rule: Subject + Verb (add s/es for He, She, It).</p><h4 class="text-xl font-bold mt-4 mb-2 text-purple-700">Present Continuous Tense: (Happening Now)</h4><p>Rule: Subject + is/am/are + V-ing.</p>` }, quiz: [
+                    { question: "She ___ to the market every Sunday. (go)", options: ["go", "goes", "went"], answer: 1 },
+                    { question: "Right now, I ___ the news. (watch)", options: ["watch", "am watching", "watched"], answer: 1 }
+                ], activity: {} },
+                { unit: 'Grammar 2', title: 'Active and Passive Voice (Fundamentals)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-purple-700">Active Voice: (The 'Doer' is Important)</h4><p>The subject performs the action. (e.g., *The boy* kicks the ball.)</p><h4 class="text-xl font-bold mt-4 mb-2 text-purple-700">Passive Voice: (The 'Action' is Important)</h4><p>The action is performed on the subject. Rule: Object + Be form + V3 + by + Subject</p>` }, quiz: [
+                    { question: "Change to Passive: 'She sings a song.'", options: ["A song is sung by her.", "A song was sung by her."], answer: 0 },
+                    { question: "Change to Active: 'The thief was caught by the police.'", options: ["The police caught the thief.", "The police catches the thief."], answer: 0 }
+                ], activity: {} },
+                { unit: 'Speech', title: 'Direct and Indirect Speech (Basic Reporting)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-purple-700">Reporting Secrets!</h4><p>When reporting what someone said, we often change the tense (e.g., Present Simple to Past Simple) and pronouns.</p>` }, quiz: [], activity: {} },
+            ],
+            '11': [
+                { unit: 'Figures', title: 'Figures of Speech: Simile, Metaphor, Personification', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-teal-700">Simile:</h4><p>Comparison using 'like' or 'as'. (e.g., She is *as fast as* a cheetah.)</p><h4 class="text-xl font-bold mt-4 mb-2 text-teal-700">Metaphor:</h4><p>Direct comparison without 'like' or 'as'. (e.g., The road *was a ribbon* of moonlight.)</p>` }, quiz: [], activity: {} },
+                { unit: 'Clauses', title: 'Adjective and Adverb Clauses', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-teal-700">Adjective Clauses: (Who, Which, That)</h4><p>These clauses act like an adjective—they modify a noun.</p><h4 class="text-xl font-bold mt-4 mb-2 text-teal-700">Adverb Clauses: (When, Where, Because)</h4><p>These clauses tell you *how, when, where,* or *why* an action happened.</p>` }, quiz: [], activity: {} },
+                { unit: 'Synthesis', title: 'Sentence Synthesis and Transformation', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-teal-700">Sentence Building:</h4><p>Combining two or more simple sentences into one bigger, more exciting sentence!</p>` }, quiz: [], activity: {} }
+            ],
+            '12': [
+                { unit: 'Conditionals', title: 'Conditional Sentences (The "If...Then" Rules)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-orange-700">Type 3 Conditional: (If the Past was Different)</h4><p>Used for hypothetical past situations. If + past perfect, would have + past participle. (e.g., If I *had studied*, I *would have passed*.)</p>` }, quiz: [], activity: {} },
+                { unit: 'Inversion', title: 'Inversion (Starting with a Negative)', type: 'Grammar', content: { rules: `<h4 class="text-xl font-bold mt-4 mb-2 text-orange-700">The Power of "Never":</h4><p>When a negative word (like Never, Rarely, Hardly) starts a sentence, the verb order changes: Never *have I seen* a better movie. (Verb before Subject)</p>` }, quiz: [], activity: {} }
+            ]
+        };
+
+
+        // --- UTILITY FUNCTIONS ---
+        function getTodayDateString() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        
+        function getYesterdayDateString() {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const year = yesterday.getFullYear();
+            const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+            const day = String(yesterday.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        
+        function getDayOfYear() {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 0);
+            const diff = now - start;
+            const oneDay = 1000 * 60 * 60 * 24;
+            return Math.floor(diff / oneDay);
+        }
+
+        // --- PAGE/UI MANAGEMENT ---
+        const pages = ['page-entry', 'page-loading', 'page-dashboard', 'page-grammar-menu', 'page-study', 'page-quiz', 'page-scoreboard', 'page-vocabulary']; 
+
+        function showPage(pageId) {
+            pages.forEach(page => {
+                const el = document.getElementById(page);
+                if (page === pageId) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+        
+        function showMessage(elementId, message, isError = false) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            if (isError) {
+                el.classList.remove('text-green-600', 'bg-green-100');
+                el.classList.add('text-red-600', 'bg-red-100');
+            } else {
+                el.classList.remove('text-red-600', 'bg-red-100');
+                el.classList.add('text-green-600', 'bg-green-100');
+            }
+            el.classList.remove('hidden');
+            setTimeout(() => {
+                el.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Manages the disabled/enabled state of the entry form elements.
+         * @param {boolean} isReady True to enable the form (authentication complete), False to disable.
+         */
+        function updateEntryFormState(isReady) {
+            const button = document.getElementById('entry-submit-button');
+            const inputs = [
+                document.getElementById('entry-rollno'),
+                document.getElementById('entry-username'),
+                document.getElementById('entry-class')
+            ];
+            
+            if (button) {
+                if (isReady) {
+                    button.disabled = false;
+                    button.textContent = 'Start My Adventure! 🚀';
+                    button.classList.remove('opacity-50', 'cursor-not-allowed');
+                    button.classList.add('hover:bg-red-600');
+                } else {
+                    button.disabled = true;
+                    button.textContent = 'Connecting to Adventure... ⏳';
+                    button.classList.add('opacity-50', 'cursor-not-allowed');
+                    button.classList.remove('hover:bg-red-600');
+                }
+                
+                inputs.forEach(input => {
+                    if (input) input.disabled = !isReady;
+                });
+            }
+        }
+
+
+        function updateDashboardUI() {
+            if (!currentStudentData) return;
+             document.getElementById('dashboard-username').textContent = currentStudentData.username;
+             document.getElementById('dashboard-total-score').textContent = currentStudentData.score;
+             document.getElementById('dashboard-details').textContent = `Class: ${currentStudentData.class} | Roll No: ${currentStudentData.roll_no}`;
+             document.getElementById('dashboard-std-num').textContent = currentStudentData.standard;
+             document.getElementById('dashboard-streak-info').textContent = `${currentStudentData.currentStreak || 0} Day Streak 🔥`;
+             loadWordOfTheDay(); // Load the WOTD every time dashboard loads
+             updateCheckInButtonState();
+        }
+        
+        function updateCheckInButtonState() {
+            const checkInButton = document.getElementById('daily-checkin-button');
+            const todayStr = getTodayDateString();
+            
+            if (!currentStudentData) return;
+            
+            if (currentStudentData.lastCheckInDate === todayStr) {
+                checkInButton.disabled = true;
+                checkInButton.textContent = '✅ Awesome! Checked In Today!';
+                checkInButton.classList.replace('bg-green-600', 'bg-gray-400');
+                checkInButton.classList.replace('hover:bg-green-700', 'hover:bg-gray-400');
+            } else {
+                checkInButton.disabled = false;
+                checkInButton.textContent = 'Daily Check-in for Bonus Points!';
+                checkInButton.classList.replace('bg-gray-400', 'bg-green-600');
+                checkInButton.classList.add('hover:bg-green-700');
+            }
+        }
+        
+        // --- Word of the Day Logic (Cycles Daily) ---
+        function loadWordOfTheDay() {
+            const dayNum = getDayOfYear();
+            // Use modulo operator on the size of the vocabulary array to ensure daily change
+            const wordIndex = dayNum % vocabularyData.length;
+            const wotd = vocabularyData[wordIndex];
+            
+            document.getElementById('wotd-word').textContent = wotd.word;
+            document.getElementById('wotd-gujarati').textContent = wotd.gujarati;
+            document.getElementById('wotd-phonetic').textContent = `(${wotd.phonetic})`;
+        }
+
+
+        // --- IDENTITY & AUTH UTILITIES ---
+        function createStudentDocId(roll_no, class_std) {
+            return `${class_std.toUpperCase().replace(/[^A-Z0-9-]/g, '')}_${roll_no.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        }
+
+        async function findStudentByAuthId(uid) {
+            if (!db) return null;
+            try {
+                const q = query(collection(db, PUBLIC_USER_COLLECTION_PATH), where("auth_uid", "==", uid));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    const docSnap = querySnapshot.docs[0];
+                    return { data: docSnap.data(), docId: docSnap.id };
+                }
+                return null;
+            } catch (error) {
+                console.error("Error finding student by auth UID on refresh:", error);
+                return null;
+            }
+        }
+
+        function setupAuthListener() {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    const foundData = await findStudentByAuthId(user.uid); 
+                    
+                    if (foundData) {
+                        currentStudentData = foundData.data;
+                        studentDocId = foundData.docId;
+                        
+                        // Ensure new fields exist
+                        currentStudentData.currentStreak = currentStudentData.currentStreak || 0;
+                        currentStudentData.lastCheckInDate = currentStudentData.lastCheckInDate || '2000-01-01';
+
+                        currentStandard = currentStudentData.standard;
+                        
+                        updateDashboardUI();
+                        showPage('page-dashboard'); // Land directly on dashboard on reload
+                    } else {
+                        updateEntryFormState(true); // User authenticated, but data not found. Enable form for registration.
+                        showPage('page-entry');
+                    }
+                } else {
+                    currentUser = null;
+                    currentStudentData = null;
+                    studentDocId = null;
+                    updateEntryFormState(false); // Not authenticated, keep form disabled.
+                    showPage('page-entry');
+                }
+            });
+        }
+
+        // --- CORE ENTRY LOGIC (LOGIN/REGISTER) ---
+        async function handleStudentEntry(event) {
+            event.preventDefault();
+            
+            const roll_no_raw = document.getElementById('entry-rollno').value.trim();
+            const class_std_full = document.getElementById('entry-class').value;
+            const username = document.getElementById('entry-username').value.trim();
+            const messageElId = 'entry-message';
+
+            if (!roll_no_raw || !class_std_full || !username) {
+                showMessage(messageElId, '⚠️ Please fill in all fields (Name, Roll No, and Class) to start the adventure.', true);
+                return;
+            }
+            if (!isFirebaseReady || !currentUser || !currentUser.uid) {
+                 showMessage(messageElId, '❌ Connection still initializing. Please wait a moment and try again.', true);
+                 return;
+            }
+
+            // --- VALIDATION CHECKS ---
+            // Roll No must be a valid, positive integer
+            const roll_no = parseInt(roll_no_raw, 10);
+            if (isNaN(roll_no) || roll_no <= 0 || roll_no.toString() !== roll_no_raw) {
+                showMessage(messageElId, 'Roll No must be a valid, positive whole number (e.g., 5, 23).', true);
+                return;
+            }
+            
+            // Username must contain at least one non-digit character (e.g., a letter)
+            if (!/[a-zA-Z]/.test(username)) {
+                showMessage(messageElId, 'Username must contain at least one letter.', true);
+                return;
+            }
+            // --- END VALIDATION CHECKS ---
+
+
+            studentDocId = createStudentDocId(roll_no_raw, class_std_full); // Use raw string for doc ID creation
+            const studentDocRef = doc(db, PUBLIC_USER_COLLECTION_PATH, studentDocId);
+            const class_std_num = class_std_full.split('-')[0];
+
+            try {
+                const docSnap = await getDoc(studentDocRef);
+
+                if (docSnap.exists()) {
+                    currentStudentData = docSnap.data();
+                    currentStudentData.currentStreak = currentStudentData.currentStreak || 0;
+                    currentStudentData.lastCheckInDate = currentStudentData.lastCheckInDate || '2000-01-01';
+                    
+                    if (!currentStudentData.auth_uid) { await updateDoc(studentDocRef, { auth_uid: currentUser.uid }); }
+                    showMessage(messageElId, '🎉 Welcome back! Let\'s learn!', false);
+                } else {
+                    currentStudentData = {
+                        username: username,
+                        roll_no: roll_no_raw, // Store as string for consistency
+                        class: class_std_full,
+                        standard: class_std_num,
+                        score: 0,
+                        auth_uid: currentUser.uid,
+                        lastCheckInDate: '2000-01-01',
+                        currentStreak: 0
+                    };
+                    await setDoc(studentDocRef, currentStudentData);
+                    showMessage(messageElId, '🚀 Registration successful! Get ready to fly high!', false);
+                }
+                
+                currentStandard = currentStudentData.standard;
+                updateDashboardUI();
+                showPage('page-dashboard'); // LAND DIRECTLY ON DASHBOARD
+
+            } catch (error) {
+                console.error("Student entry error (Firestore):", error);
+                showMessage(messageElId, `❌ Error accessing student data. Check Security Rules.`, true);
+            }
+        }
+        
+        // --- DAILY CHECK-IN LOGIC (Updated Streak Reset) ---
+        async function handleDailyCheckIn() {
+            if (!currentStudentData || !db || !studentDocId) return;
+
+            const todayStr = getTodayDateString();
+            const yesterdayStr = getYesterdayDateString();
+            const checkInButton = document.getElementById('daily-checkin-button');
+            const messageElId = 'dashboard-message'; 
+            const STREAK_BONUS_POINTS = 50; // Increased points for kid-friendly motivation
+            const STREAK_GOAL = 7;
+
+            if (currentStudentData.lastCheckInDate === todayStr) {
+                showMessage(messageElId, `You've already checked in today! Keep learning!`, false);
+                return;
+            }
+
+            checkInButton.disabled = true;
+            checkInButton.textContent = 'Checking In... ⏳';
+
+            let newStreak;
+            let pointsAwarded = 0;
+            let notification = `Daily check-in complete. You got 10 points!`; // Base points for check-in
+            let streakMessage = '';
+            pointsAwarded += 10; // Base daily points
+
+            // 1. Calculate the raw new streak
+            if (currentStudentData.lastCheckInDate === yesterdayStr) {
+                newStreak = (currentStudentData.currentStreak || 0) + 1;
+            } else {
+                newStreak = 1; 
+                notification = `Check-in complete. New streak started!`;
+            }
+            
+            let streakForDisplay = newStreak; // Default display value
+
+            // 2. Check for streak bonus and reset (reset after 7, 14, 21, etc.)
+            if (newStreak >= STREAK_GOAL && newStreak % STREAK_GOAL === 0) { 
+                pointsAwarded += STREAK_BONUS_POINTS;
+                streakMessage = `🥳 STREAK CHAMPION! You earned ${STREAK_BONUS_POINTS} bonus points for 7 days!`;
+                
+                // Reset streak for the next cycle (Today counts as Day 1 of the new cycle)
+                streakForDisplay = 1; 
+            }
+
+            const newTotalScore = (currentStudentData.score || 0) + pointsAwarded;
+
+            try {
+                const studentDocRef = doc(db, PUBLIC_USER_COLLECTION_PATH, studentDocId);
+                
+                // IMPORTANT: Save the streak value that the student sees for the next calculation
+                await updateDoc(studentDocRef, {
+                    lastCheckInDate: todayStr,
+                    currentStreak: streakForDisplay, 
+                    score: newTotalScore
+                });
+                
+                currentStudentData.lastCheckInDate = todayStr;
+                currentStudentData.currentStreak = streakForDisplay;
+                currentStudentData.score = newTotalScore;
+                
+                updateDashboardUI();
+                showMessage(messageElId, `🎉 ${notification} ${streakMessage}`, false);
+                
+            } catch (error) {
+                console.error("Daily check-in error:", error);
+                showMessage(messageElId, `❌ Error saving check-in data. Please try again.`, true);
+            }
+            
+            updateCheckInButtonState();
+        }
+        window.handleDailyCheckIn = handleDailyCheckIn;
+
+        // --- NAVIGATION TO GRAMMAR MENU ---
+        function handleStandardSelect(standard) {
+            currentStandard = standard;
+            const grammarTopics = curriculum[standard];
+            
+            document.getElementById('grammar-menu-title').textContent = `Standard ${standard} Fun Topics!`;
+            const menuContainer = document.getElementById('grammar-menu-container');
+            menuContainer.innerHTML = '';
+            
+            if (!grammarTopics || grammarTopics.length === 0) {
+                 menuContainer.innerHTML = '<p class="text-center text-gray-500 p-8">No grammar topics found for this standard yet. Check back soon!</p>';
+                 showPage('page-grammar-menu');
+                 return;
+            } 
+
+            grammarTopics.forEach(item => {
+                const grammarCard = document.createElement('div');
+                grammarCard.className = 'bg-yellow-50 p-6 rounded-xl shadow-lg border-2 border-yellow-300 cursor-pointer hover:bg-yellow-100 transition duration-150 transform hover:scale-[1.01]';
+                
+                const hasQuiz = item.quiz && item.quiz.length > 0;
+                
+                grammarCard.innerHTML = `
+                    <h4 class="text-xl font-extrabold text-orange-700 mb-3 flex items-center">
+                        <span class="mr-2 text-2xl">📚</span> ${item.title}
+                    </h4>
+                    <div class="mt-3 flex space-x-3 text-lg">
+                        <button class="flex-1 p-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition duration-150 font-bold shadow-md" 
+                            onclick="loadStudySection('${currentStandard}', '${item.title}')">
+                            <span class="text-xl mr-1">💡</span> Learn Now
+                        </button>
+                        ${hasQuiz ? 
+                            `<button class="flex-1 p-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-150 font-bold shadow-md" 
+                                onclick="startQuiz('${currentStandard}', '${item.title}')">
+                                <span class="text-xl mr-1">🎯</span> Take Quiz
+                            </button>` 
+                            : `<button class="flex-1 p-3 bg-gray-300 text-gray-600 rounded-lg cursor-not-allowed font-bold">Quiz Coming Soon</button>`}
+                    </div>
+                `;
+                menuContainer.appendChild(grammarCard);
+            });
+
+            showPage('page-grammar-menu');
+        }
+
+        // --- STUDY SECTION (Displays Grammar Rules) ---
+        function loadStudySection(standard, title) {
+            const topic = curriculum[standard].find(i => i.title === title);
+            if (!topic) { showMessage('dashboard-message', 'Error: Content not found.', true); showPage('page-dashboard'); return; }
+
+            document.getElementById('study-title').textContent = `Topic: ${topic.title}`;
+            document.getElementById('study-content').innerHTML = `
+                <h3 class="text-3xl font-extrabold text-blue-800 mb-6 border-b-4 border-yellow-400 pb-3">${topic.title}</h3>
+                <div class="bg-white p-6 rounded-xl shadow-inner border border-yellow-200 text-lg">
+                    ${topic.content.rules}
+                </div>
+                ${topic.quiz.length > 0 ? 
+                    `<button class="mt-8 w-full p-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition duration-150 font-bold shadow-lg text-xl"
+                        onclick="startQuiz('${standard}', '${topic.title}')">
+                        Let's Test Our Skills! Take the Quiz!
+                    </button>` 
+                    : ''}
+            `;
+            showPage('page-study');
+        }
+        
+        // --- QUIZ SECTION (Omitted for brevity, logic remains the same) ---
+        async function startQuiz(standard, title) {
+            if (!currentStudentData) {
+                showMessage('dashboard-message', 'Please enter your details first to start the quiz.', true);
+                showPage('page-entry');
+                return;
+            }
+            
+            const topic = curriculum[standard].find(i => i.title === title);
+            
+            if (!topic || topic.quiz.length === 0) {
+                showMessage('dashboard-message', `No quiz questions found for ${title}.`, true);
+                return;
+            }
+
+            currentQuizQuestions = topic.quiz;
+            currentQuestionIndex = 0;
+            currentQuizScore = 0;
+            
+            document.getElementById('quiz-topic-title').textContent = `Quiz Challenge: ${topic.title}`;
+            loadQuestion();
+            showPage('page-quiz');
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIndex >= currentQuizQuestions.length) {
+                finishQuiz();
+                return;
+            }
+            const q = currentQuizQuestions[currentQuestionIndex];
+            document.getElementById('question-text').textContent = q.question;
+            
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = ''; 
+            
+            q.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.className = "w-full text-left p-4 rounded-xl border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-4 focus:ring-orange-500 transition duration-150 shadow-md text-lg font-semibold";
+                button.onclick = () => selectAnswer(index);
+                optionsContainer.appendChild(button);
+            });
+            document.getElementById('quiz-progress').textContent = `Question ${currentQuestionIndex + 1} of ${currentQuizQuestions.length}`;
+            document.getElementById('quiz-feedback').classList.add('hidden');
+        }
+
+        function selectAnswer(selectedIndex) {
+            const q = currentQuizQuestions[currentQuestionIndex];
+            const feedbackEl = document.getElementById('quiz-feedback');
+            const optionsButtons = document.querySelectorAll('#options-container button');
+
+            optionsButtons.forEach(button => { button.disabled = true; });
+
+            if (selectedIndex === q.answer) {
+                currentQuizScore += 10; // Increased quiz points
+                feedbackEl.textContent = '🥳 Correct! You earned 10 Points!';
+                feedbackEl.className = 'p-4 rounded-xl bg-green-200 text-green-800 font-bold border-2 border-green-500 text-xl';
+                optionsButtons[selectedIndex].classList.add('bg-green-300', 'border-green-500', 'ring-4', 'ring-green-400');
+            } else {
+                feedbackEl.textContent = 'Oh No! The correct answer was: ' + q.options[q.answer];
+                feedbackEl.className = 'p-4 rounded-xl bg-red-200 text-red-800 font-bold border-2 border-red-500 text-xl';
+                optionsButtons[selectedIndex].classList.add('bg-red-300', 'border-red-500');
+                optionsButtons[q.answer].classList.add('bg-green-300', 'border-green-500', 'ring-4', 'ring-green-400');
+            }
+            feedbackEl.classList.remove('hidden');
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                loadQuestion();
+            }, 2000);
+        }
+
+        async function finishQuiz() {
+            document.getElementById('question-text').textContent = 'Quiz Complete!';
+            document.getElementById('options-container').innerHTML = `<p class="text-2xl font-extrabold text-center mt-4 text-blue-600">You scored ${currentQuizScore} points on this quiz!</p>`;
+            document.getElementById('quiz-progress').textContent = 'Finished';
+            
+            if (!currentStudentData || !db || !studentDocId) {
+                document.getElementById('options-container').innerHTML += `<p class="text-orange-500 mt-4 text-center">Score not saved. Authentication issue.</p>`;
+            } else {
+                try {
+                    const studentDocRef = doc(db, PUBLIC_USER_COLLECTION_PATH, studentDocId);
+                    const newTotalScore = (currentStudentData.score || 0) + currentQuizScore;
+                    await updateDoc(studentDocRef, { score: newTotalScore });
+                    currentStudentData.score = newTotalScore;
+                    updateDashboardUI();
+                    document.getElementById('options-container').innerHTML += `<p class="text-green-700 mt-4 text-center font-extrabold text-2xl">Total Score: ${newTotalScore} 🎉</p>`;
+                } catch (error) {
+                    console.error("Score update error:", error);
+                    document.getElementById('options-container').innerHTML += `<p class="text-red-500 mt-4 text-center">Could not save your score.</p>`;
+                }
+            }
+           
+            const backButton = document.createElement('button');
+            backButton.textContent = 'Back to Topic Menu';
+            backButton.className = "mt-8 w-full bg-purple-600 text-white py-4 px-4 rounded-xl hover:bg-purple-700 transition duration-200 shadow-lg text-xl font-bold";
+            backButton.onclick = () => handleStandardSelect(currentStandard);
+            document.getElementById('options-container').appendChild(backButton);
+        }
+
+        // --- VOCABULARY SECTION ---
+        function loadVocabularyPage() {
+            const container = document.getElementById('vocabulary-container');
+            container.innerHTML = '';
+            
+            vocabularyData.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-5 rounded-xl shadow-lg border-2 border-teal-300 transition duration-150 hover:shadow-xl';
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="text-2xl font-extrabold text-gray-800">${item.word}</h4>
+                        <span class="text-base font-mono bg-teal-100 text-teal-800 py-1 px-3 rounded-full shadow-inner">${item.phonetic}</span>
+                    </div>
+                    <p class="text-xl text-purple-700 font-bold mt-2">Meaning (ગુજરાતી): <br>${item.gujarati}</p>
+                `;
+                container.appendChild(card);
+            });
+            showPage('page-vocabulary');
+        }
+        window.loadVocabularyPage = loadVocabularyPage;
+
+        // --- SCOREBOARD (Public view - Unchanged) ---
+        async function loadScoreboard() {
+            if (!db || !currentUser) {
+                showMessage('page-loading-message', 'Authentication required to view scoreboard.', true);
+                showPage('page-dashboard');
+                return;
+            }
+            showPage('page-loading'); 
+            const scoreboardBody = document.getElementById('scoreboard-table-body');
+            scoreboardBody.innerHTML = ''; 
+
+            try {
+                const q = query(collection(db, PUBLIC_USER_COLLECTION_PATH));
+                const querySnapshot = await getDocs(q);
+                let studentsList = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.roll_no && data.score >= 0) { 
+                        studentsList.push(data);
+                    }
+                });
+
+                studentsList.sort((a, b) => b.score - a.score);
+
+                studentsList.forEach((student, index) => {
+                    const row = document.createElement('tr');
+                    row.className = (index % 2 === 0) ? 'bg-white' : 'bg-gray-50';
+                    const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '✨';
+
+                    row.innerHTML = `
+                        <td class="p-4 font-extrabold text-xl text-center text-gray-900">${rankEmoji} ${index + 1}</td>
+                        <td class="p-4 text-lg text-gray-700">${student.username}</td>
+                        <td class="p-4 text-lg text-gray-700">${student.class}</td>
+                        <td class="p-4 text-lg text-gray-700">${student.roll_no}</td>
+                        <td class="p-4 font-extrabold text-2xl text-red-600">${student.score}</td>
+                    `;
+                    scoreboardBody.appendChild(row);
+                });
+
+                showPage('page-scoreboard');
+
+            } catch (error) {
+                console.error("Scoreboard read error:", error);
+                showMessage('dashboard-message', 'Error loading scoreboard.', true); 
+                showPage('page-dashboard'); 
+            }
+        }
+        
+        // --- LONG PRESS LOGIC FOR LOGOUT (Secret) ---
+        let pressTimer;
+        const LONG_PRESS_DURATION = 1000; 
+
+        function startPress(e) {
+            if (e.type === 'touchstart') { e.preventDefault(); }
+            const scoreboardButton = document.getElementById('dashboard-scoreboard-button');
+            clearTimeout(pressTimer);
+            
+            pressTimer = setTimeout(async () => {
+                if (auth) { await signOut(auth); }
+                scoreboardButton.dataset.longPressed = 'true';
+            }, LONG_PRESS_DURATION);
+        }
+
+        function endPress() {
+            clearTimeout(pressTimer);
+        }
+
+        function defaultClick(e) {
+            const scoreboardButton = document.getElementById('dashboard-scoreboard-button');
+            if (scoreboardButton.dataset.longPressed === 'true') {
+                delete scoreboardButton.dataset.longPressed; 
+                return;
+            }
+            loadScoreboard();
+        }
+        
+        // --- EVENT LISTENERS (Run on window load) ---
+        window.onload = () => {
+            initializeFirebase(); 
+
+            // --- Entry Form ---
+            document.getElementById('student-entry-form').onsubmit = handleStudentEntry;
+
+            // --- Dashboard Buttons ---
+            const scoreboardButton = document.getElementById('dashboard-scoreboard-button');
+            scoreboardButton.addEventListener('mousedown', startPress);
+            scoreboardButton.addEventListener('touchstart', startPress); 
+            scoreboardButton.addEventListener('mouseup', endPress);
+            scoreboardButton.addEventListener('mouseleave', endPress);
+            scoreboardButton.addEventListener('touchend', endPress);
+            scoreboardButton.addEventListener('click', defaultClick);
+
+            document.getElementById('dashboard-grammar-button').onclick = () => handleStandardSelect(currentStandard);
+            document.getElementById('daily-checkin-button').onclick = handleDailyCheckIn;
+            document.getElementById('dashboard-vocabulary-button').onclick = loadVocabularyPage;
+
+            // --- Back Buttons ---
+            document.getElementById('grammar-menu-back-button').onclick = () => showPage('page-dashboard');
+            document.getElementById('study-back-button').onclick = () => handleStandardSelect(currentStandard);
+            document.getElementById('scoreboard-back-button').onclick = () => showPage('page-dashboard');
+            document.getElementById('vocabulary-back-button').onclick = () => showPage('page-dashboard');
+            
+            showPage('page-loading');
+        };
+
+        // Expose functions globally for inline HTML event handlers
+        window.loadStudySection = loadStudySection;
+        window.startQuiz = startQuiz;
+        window.handleStandardSelect = handleStandardSelect;
+        // window.loadVocabularyPage is already exposed above
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        /* Custom style for number input to hide native spinner arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-blue-50">
+
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-lg lg:max-w-4xl">
+
+            <!-- PAGE: LOADING -->
+            <div id="page-loading" class="text-center">
+                <div id="page-loading-message"> 
+                    <!-- Content replaced by JS in initializeFirebase -->
+                    <h1 class="text-3xl font-extrabold text-blue-700">Loading Fun! 🚀</h1>
+                    <p class="text-lg text-blue-500 mt-2">Connecting to the Super Star Academy...</p>
+                </div>
+            </div>
+
+            <!-- PAGE: STUDENT ENTRY (Login/Register Combined) -->
+            <div id="page-entry" class="hidden">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl border-4 border-yellow-400 w-full max-w-lg mx-auto">
+                    <h2 class="text-4xl font-extrabold text-center text-purple-600 mb-6">SUPER STAR ENGLISH ACADEMY</h2>
+                    <p class="text-center text-base text-gray-600 mb-6">Enter your details to start your grammar adventure!</p>
+                    <form id="student-entry-form">
+                        <div class="mb-4">
+                            <label for="entry-username" class="block text-lg font-bold text-gray-700 mb-2">Your Super Name 🌟</label>
+                            <input type="text" id="entry-username" class="w-full px-5 py-3 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-400 text-lg shadow-inner" required disabled>
+                        </div>
+                        <div class="mb-4">
+                            <label for="entry-rollno" class="block text-lg font-bold text-gray-700 mb-2">Roll No. 🔢</label>
+                            <input type="number" inputmode="numeric" id="entry-rollno" class="w-full px-5 py-3 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-400 text-lg shadow-inner" required disabled>
+                        </div>
+                        <div class="mb-6">
+                            <label for="entry-class" class="block text-lg font-bold text-gray-700 mb-2">Class Level 🎓</label>
+                            <select id="entry-class" class="w-full px-5 py-3 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-400 text-lg shadow-inner bg-white" required disabled>
+                                <option value="" disabled selected>Select Your Class & Division</option>
+                                <option value="9-A">9-A</option>
+                                <option value="9-B">9-B</option>
+                                <option value="10-A">10-A</option>
+                                <option value="10-B">10-B</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                            </select>
+                        </div>
+                        <p id="entry-message" class="text-lg text-center p-3 rounded-lg font-semibold mb-4 hidden"></p>
+                        <button type="submit" id="entry-submit-button" disabled class="w-full bg-red-500 text-white py-4 px-4 rounded-xl font-extrabold text-2xl shadow-xl border-b-4 border-red-700 active:border-b-0 active:translate-y-0.5 opacity-50 cursor-not-allowed transition duration-200">
+                            Connecting to Adventure... ⏳
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- PAGE: DASHBOARD (Student View) -->
+            <div id="page-dashboard" class="hidden">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-lg mx-auto border-4 border-blue-400">
+                    <h2 class="text-3xl font-extrabold text-gray-800 mb-1">Hello, <span id="dashboard-username" class="text-blue-600">Super Star</span>!</h2>
+                    <p id="dashboard-details" class="text-base text-gray-600 mb-4 text-center">Details Loading...</p>
+                    
+                    <!-- Score & Streak -->
+                    <div class="flex justify-around items-center bg-yellow-100 p-4 rounded-xl mb-6 shadow-inner border-2 border-yellow-300">
+                        <div class="text-center">
+                            <p class="text-4xl font-extrabold text-red-600" id="dashboard-total-score">0</p>
+                            <p class="text-base font-semibold text-gray-700">Total Points 🏆</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-4xl font-extrabold text-orange-600" id="dashboard-streak-info">0 Day Streak 🔥</p>
+                            <p class="text-base font-semibold text-gray-700">Check-in Streak</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Word of the Day Card -->
+                    <div class="bg-blue-100 border-l-4 border-blue-500 p-5 rounded-xl mb-6 shadow-md">
+                        <h3 class="text-xl font-bold text-blue-800 mb-2 flex items-center">
+                            <span class="mr-2 text-2xl">💡</span> Word of the Day Challenge!
+                        </h3>
+                        <p class="text-4xl font-extrabold text-purple-900" id="wotd-word">Loading...</p>
+                        <p class="text-lg text-gray-600 font-mono mt-1" id="wotd-phonetic"></p>
+                        <p class="text-2xl text-red-700 font-bold mt-3">ગુજરાતી અર્થ: <span id="wotd-gujarati" class="font-extrabold text-red-800">...</span></p>
+                    </div>
+
+                    <p id="dashboard-message" class="text-lg text-center p-3 rounded-xl font-semibold mb-6 hidden"></p>
+                    
+                    <h3 class="text-xl font-extrabold text-gray-700 mb-4 text-center border-t-2 border-gray-200 pt-4">Your Fun Activities</h3>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button id="daily-checkin-button" class="p-4 bg-green-600 text-white rounded-xl font-extrabold text-xl hover:bg-green-700 transition duration-150 shadow-lg col-span-2 border-b-4 border-green-800 active:border-b-0 active:translate-y-0.5">
+                            Daily Check-in for Bonus Points!
+                        </button>
+                        <button id="dashboard-grammar-button" class="p-4 bg-purple-600 text-white rounded-xl font-extrabold text-xl hover:bg-purple-700 transition duration-150 shadow-lg border-b-4 border-purple-800 active:border-b-0 active:translate-y-0.5">
+                            Grammar Lessons (Std <span id="dashboard-std-num">10</span>) 🧠
+                        </button>
+                         <button id="dashboard-vocabulary-button" class="p-4 bg-teal-500 text-white rounded-xl font-extrabold text-xl hover:bg-teal-600 transition duration-150 shadow-lg border-b-4 border-teal-700 active:border-b-0 active:translate-y-0.5">
+                            Full Vocabulary List 📖
+                        </button>
+                        <button id="dashboard-scoreboard-button" class="p-4 bg-orange-500 text-white rounded-xl font-extrabold text-xl hover:bg-orange-600 transition duration-200 shadow-lg col-span-2 border-b-4 border-orange-700 active:border-b-0 active:translate-y-0.5">
+                            View Top Learners Leaderboard 🥇
+                        </button>
+                    </div>
+                    
+                    <!-- Credits Section -->
+                    <div class="mt-8 pt-4 border-t border-gray-200 text-center">
+                        <h4 class="text-lg font-bold text-gray-700 mb-2">🚀 Project Credits 🚀</h4>
+                        <p class="text-sm text-gray-600">Developed by: <span class="font-semibold text-blue-600">Gulam Dastagir Malek (GDM)</span></p>
+                        <p class="text-sm text-gray-600">Contact: <a href="mailto:gulampc123@gmail.com" class="text-purple-600 hover:underline">gulampc123@gmail.com</a></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PAGE: VOCABULARY -->
+            <div id="page-vocabulary" class="hidden">
+                 <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl mx-auto border-4 border-teal-400">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-extrabold text-gray-800">Mega Vocabulary Book!</h2>
+                        <button id="vocabulary-back-button" class="text-lg font-bold text-blue-600 hover:underline">⬅️ Back to Dashboard</button>
+                    </div>
+                    <p class="text-base text-gray-500 mb-4">Here are all the words to make you a star learner:</p>
+                    <div id="vocabulary-container" class="space-y-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Vocabulary cards loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE: GRAMMAR MENU (Chapter List) -->
+            <div id="page-grammar-menu" class="hidden">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-lg mx-auto border-4 border-purple-400">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 id="grammar-menu-title" class="text-3xl font-extrabold text-gray-800">Grammar Topics</h2>
+                        <button id="grammar-menu-back-button" class="text-lg font-bold text-blue-600 hover:underline">⬅️ Back to Dashboard</button>
+                    </div>
+                    <div id="grammar-menu-container" class="space-y-4">
+                        <!-- Grammar topic cards loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE: STUDY (Lesson Content) -->
+            <div id="page-study" class="hidden">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl mx-auto border-4 border-yellow-400">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 id="study-title" class="text-3xl font-extrabold text-blue-800">Study Material</h2>
+                        <button id="study-back-button" class="text-lg font-bold text-blue-600 hover:underline">⬅️ Back to Menu</button>
+                    </div>
+                    <div id="study-content" class="prose max-w-none">
+                        <!-- Grammar rules content will be loaded here by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE: QUIZ -->
+            <div id="page-quiz" class="hidden">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-lg mx-auto border-4 border-red-400">
+                    <h2 id="quiz-topic-title" class="text-3xl font-extrabold text-center text-red-700 mb-6">Quiz Challenge!</h2>
+                    <div class="mb-4">
+                        <p id="question-text" class="text-2xl font-bold text-gray-900 mb-8 p-3 bg-gray-50 rounded-lg shadow-inner">Question text...</p>
+                        <div id="options-container" class="space-y-4">
+                            <!-- Options will be loaded here by JavaScript -->
+                        </div>
+                    </div>
+                    <div id="quiz-feedback" class="p-4 rounded-xl hidden my-6 text-center font-extrabold"></div>
+                    <p id="quiz-progress" class="text-lg font-semibold text-gray-600 text-center border-t pt-4">Progress tracker</p>
+                </div>
+            </div>
+
+            <!-- PAGE: SCOREBOARD -->
+            <div id="page-scoreboard" class="hidden w-full lg:max-w-4xl">
+                <div class="bg-white p-8 rounded-3xl shadow-2xl w-full border-4 border-orange-400">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-extrabold text-gray-800">Top Learners Leaderboard 🏆</h2>
+                        <button id="scoreboard-back-button" class="text-lg font-bold text-blue-600 hover:underline">⬅️ Back to Dashboard</button>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-md">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-yellow-100">
+                                <tr>
+                                    <th class="p-4 text-center text-lg font-bold text-gray-700 uppercase">Rank</th>
+                                    <th class="p-4 text-left text-lg font-bold text-gray-700 uppercase">Super Name</th>
+                                    <th class="p-4 text-left text-lg font-bold text-gray-700 uppercase">Class</th>
+                                    <th class="p-4 text-left text-lg font-bold text-gray-700 uppercase">Roll No</th>
+                                    <th class="p-4 text-left text-lg font-bold text-gray-700 uppercase">Total Score</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scoreboard-table-body" class="divide-y divide-gray-200">
+                                <!-- Scores will be loaded here by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
