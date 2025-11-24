@@ -425,29 +425,19 @@
         // --- GLOBAL VARIABLES ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'superstar-english-academy';
         
-        // --- FIREBASE CONFIGURATION ---
-        const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID",
-            measurementId: "YOUR_MEASUREMENT_ID"
-        };
+        // --- FIREBASE CONFIGURATION (SIMPLIFIED) ---
         
-        let firebaseConfig;
+        let firebaseConfig = null;
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
             try {
+                 // Try to parse the injected config
                  firebaseConfig = JSON.parse(__firebase_config);
             } catch (e) {
                  console.error("Failed to parse __firebase_config:", e);
-                 firebaseConfig = MANUAL_FIREBASE_CONFIG;
+                 // config remains null, leading to an intentional error in initializeFirebase
             }
-        } else {
-            firebaseConfig = MANUAL_FIREBASE_CONFIG;
         }
-
+        
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- APP STATE ---
@@ -542,6 +532,11 @@
         // --- FIREBASE INITIALIZATION & AUTHENTICATION ---
         async function initializeFirebase() {
             try {
+                // Critical check for valid config
+                if (!firebaseConfig || !firebaseConfig.projectId) {
+                    throw new Error("Critical: Firebase configuration is missing or invalid. Please check your runtime environment injection.");
+                }
+
                 // 1. Initialize App
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -574,7 +569,7 @@
             } catch (error) {
                 console.error("Firebase Initialization/Authentication failed:", error);
                 // Fail gracefully and show a general error message
-                showStatus(`Failed to connect to the database. You can still try to register/sign in, but reads/writes may fail. Error: ${error.message}`, true);
+                showStatus(`Failed to connect to the database. Error: ${error.message}`, true);
                 
                 // Ensure the registration screen is visible
                 registrationCardEl.classList.remove('hidden');
