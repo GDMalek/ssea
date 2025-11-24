@@ -20,11 +20,57 @@
         .card:hover {
             transform: translateY(-2px);
         }
+        /* Custom styles for Quiz Options */
+        .quiz-option-btn {
+            @apply w-full p-4 text-left border border-gray-300 rounded-xl bg-white text-gray-800 font-medium hover:bg-indigo-50 hover:border-indigo-500 transition duration-200 ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .quiz-option-btn.selected {
+            @apply ring-4 ring-indigo-300;
+        }
+        .quiz-option-btn.correct {
+            @apply bg-green-500 text-white border-green-700 shadow-xl;
+        }
+        .quiz-option-btn.incorrect {
+            @apply bg-red-500 text-white border-red-700 shadow-xl;
+        }
+        /* Global Loading Overlay */
+        #global-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #4f46e5;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
-    <div id="app" class="max-w-7xl mx-auto">
+    <!-- Global Loading Overlay -->
+    <div id="global-loader" class="flex">
+        <div class="spinner"></div>
+        <p class="mt-4 text-xl font-semibold text-indigo-600">Loading Application...</p>
+    </div>
+
+    <div id="app" class="max-w-7xl mx-auto hidden">
         <!-- Header -->
         <header class="text-center py-6 mb-8 bg-white rounded-xl shadow-lg">
             <h1 class="text-4xl font-extrabold text-indigo-700">
@@ -35,60 +81,95 @@
 
         <!-- Loading Indicator and Error Message -->
         <div id="status-message" class="text-center p-4 rounded-lg text-lg hidden" role="status"></div>
+        <div id="security-warning" class="text-center p-4 rounded-lg text-lg bg-red-100 text-red-700 mb-6 hidden">
+            ⚠️ **CRITICAL WARNING:** If the app is stuck or actions fail, ensure your Firestore rules allow **authenticated users** to read/write to the **`/artifacts/{appId}/public/data/students`** collection.
+        </div>
+
 
         <!-- Main Content Grid -->
-        <div id="main-content" class="grid grid-cols-1 lg:grid-cols-3 gap-8 hidden">
+        <div id="main-content" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            <!-- Col 1: Student Actions (Registration, Check-in, Logging) -->
+            <!-- Col 1: Student/Admin Actions -->
             <div id="student-actions" class="lg:col-span-1 space-y-6">
 
-                <!-- Student Profile Card -->
+                <!-- Student/Admin Profile Card -->
                 <div id="profile-card" class="bg-white p-6 rounded-xl card hidden">
                     <h2 class="text-2xl font-semibold text-indigo-600 mb-4 flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 12a12 12 0 10-24 0h24z" />
                         </svg>
-                        My Profile
+                        <span id="profile-title">My Profile</span>
                     </h2>
                     <p class="text-lg mb-2">
-                        <span class="font-medium text-gray-700">Student ID:</span> 
+                        <span class="font-medium text-gray-700">ID:</span> 
                         <span id="display-student-id" class="text-sm bg-gray-100 p-1 rounded font-mono"></span>
                     </p>
                     <p class="text-xl mb-4 font-bold text-gray-800">
                         <span id="display-roll-class"></span>
                     </p>
                     
-                    <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                         <!-- Daily Check-in -->
-                        <button id="check-in-btn" class="w-full sm:w-1/2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition duration-150 ease-in-out shadow-md">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                            </svg>
-                            Daily Check-in
-                        </button>
+                    <div class="flex flex-col space-y-4">
+                        <div class="flex flex-wrap gap-4">
+                             <!-- Daily Check-in -->
+                            <button id="check-in-btn" class="flex-grow bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition duration-150 ease-in-out shadow-md min-w-[45%]">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                                Daily Check-in
+                            </button>
 
-                        <!-- Log Score Modal Trigger -->
-                        <button id="show-score-modal-btn" class="w-full sm:w-1/2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition duration-150 ease-in-out shadow-md">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                            <!-- Student: Quiz | Admin: Manual Score Entry -->
+                            <button id="action-btn" class="flex-grow bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition duration-150 ease-in-out shadow-md min-w-[45%]">
+                                <!-- Text updated by JS based on role -->
+                            </button>
+                        </div>
+                        
+                        <!-- Admin Action Block -->
+                        <div id="admin-actions-block" class="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200 hidden">
+                            <h4 class="font-semibold text-red-700">Admin Controls</h4>
+                            <div class="flex gap-3">
+                                <button id="penalty-btn" class="flex-grow bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-lg text-sm shadow-md">
+                                    Apply Penalty (-50 pts)
+                                </button>
+                                <button id="kick-btn" class="flex-grow bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg text-sm shadow-md">
+                                    Kick/Remove Student
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Sign Out Button -->
+                        <button id="sign-out-btn" class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg flex items-center justify-center transition duration-150 ease-in-out shadow-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
-                            Log Score
+                            Sign Out
                         </button>
                     </div>
                 </div>
 
                 <!-- Registration Card -->
                 <div id="registration-card" class="bg-white p-6 rounded-xl card">
-                    <h2 class="text-2xl font-semibold text-indigo-600 mb-4">Register Student</h2>
+                    <h2 class="text-2xl font-semibold text-indigo-600 mb-4">Register or Sign In</h2>
                     <form id="registration-form" class="space-y-4">
                         <div>
                             <label for="roll-no" class="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
-                            <input type="text" id="roll-no" required placeholder="e.g., S001" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                            <input type="text" id="roll-no" required placeholder="e.g., S001 (or 999 for Admin)" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
                         </div>
                         <div>
-                            <label for="class-name" class="block text-sm font-medium text-gray-700 mb-1">Class Name</label>
-                            <input type="text" id="class-name" required placeholder="e.g., 9-A" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                            <label for="class-name" class="block text-sm font-medium text-gray-700 mb-1">Class/Role</label>
+                            <!-- UPDATED: Corrected Class Names -->
+                            <select id="class-name" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white">
+                                <option value="" disabled selected>Select your Class or Role</option>
+                                <option value="9-A">9-A</option>
+                                <option value="9-B">9-B</option>
+                                <option value="10-A">10-A</option>
+                                <option value="10-B">10-B</option>
+                                <option value="11-A">11-A</option>
+                                <option value="11-B">11-B</option>
+                                <option value="12-A">12-A</option>
+                                <option value="12-B">12-B</option>
+                                <option value="TEACHER/ADMIN">Teacher/Admin (Use Roll No: 999)</option>
+                            </select>
                         </div>
                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out shadow-md">
                             Register & Sign In
@@ -101,7 +182,7 @@
             <div class="lg:col-span-2 bg-white p-6 rounded-xl card">
                 <h2 class="text-2xl font-semibold text-pink-600 mb-4 flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.659c-.204-.254-.535-.254-.739 0l-1.84 2.296-3.894.417-2.31 2.457c-.15.16-.234.373-.234.593v10.388c0 .22.084.433.234.593l2.31 2.457 3.894.417 1.84 2.296c.204.254.535.254.739 0l1.84-2.296 3.894-.417 2.31-2.457c.15-.16.234-.373.234-.593V5.574c0-.22-.084-.433-.234-.593l-2.31-2.457-3.894-.417-1.84-2.296z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.659c-.204-.254-.535-.254-.739 0l-1.84 2.296-3.894.417-2.31 2.457c-.15.16-.234.373-.234.593v10.388c0 .22.084.433.234.593l2.31 2.457 3.894.417 1.84 2.296c.204.254.535.254.739 0l1.84-2.296 3.894-.417 2.31-2.457c.15-.16.234-.373.234.593V5.574c0-.22-.084-.433-.234-.593l-2.31-2.457-3.894-.417-1.84-2.296z" />
                     </svg>
                     Scoreboard (Top Students)
                 </h2>
@@ -110,7 +191,7 @@
                         <thead>
                             <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 <th class="py-3 px-4">Rank</th>
-                                <th class="py-3 px-4">Roll No. / Class</th>
+                                <th class="py-3 px-4">Student ID</th>
                                 <th class="py-3 px-4 text-right">Total Score</th>
                                 <th class="py-3 px-4 text-center">Streak (Days)</th>
                                 <th class="py-3 px-4 text-center">Last Check-in</th>
@@ -126,11 +207,15 @@
         </div> <!-- End Main Content Grid -->
     </div> <!-- End app container -->
 
-    <!-- Score Logging Modal -->
+    <!-- Manual Score Logging Modal (Admin Only) -->
     <div id="score-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 class="text-xl font-bold mb-4 text-indigo-700">Log Daily Score</h3>
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-xl bg-white">
+            <h3 id="score-modal-title" class="text-xl font-bold mb-4 text-indigo-700">Log Daily Score (Admin)</h3>
             <form id="score-form" class="space-y-4">
+                <div>
+                    <label for="target-student-id" class="block text-sm font-medium text-gray-700 mb-1">Target Student ID (Format: CLASS-ROLLNO)</label>
+                    <input type="text" id="target-student-id" required placeholder="e.g., 9-A-S001" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
                 <div>
                     <label for="daily-score" class="block text-sm font-medium text-gray-700 mb-1">Score Achieved (0-100)</label>
                     <input type="number" id="daily-score" required min="0" max="100" placeholder="e.g., 95" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
@@ -143,11 +228,87 @@
         </div>
     </div>
     
+    <!-- Quiz Modal (Student Only) -->
+    <div id="quiz-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-10 mx-auto p-8 border max-w-4xl w-11/12 shadow-2xl rounded-xl bg-white min-h-[500px]">
+            <h3 class="text-3xl font-bold mb-6 text-indigo-700">Daily English Challenge</h3>
+            
+            <div id="quiz-loading-message" class="text-center p-8 text-xl font-medium text-gray-600 hidden">
+                <div class="spinner mx-auto mb-4"></div>
+                Loading Quiz Content...
+            </div>
+
+            <!-- Tab Navigation -->
+            <div id="quiz-tabs" class="border-b border-gray-200 mb-6 flex space-x-4">
+                <button id="tab-theory" class="tab-button text-lg font-medium py-2 px-4 border-b-2 border-transparent text-gray-500 hover:text-indigo-600" data-tab="theory">Theory/Reading</button>
+                <button id="tab-quiz" class="tab-button text-lg font-medium py-2 px-4 border-b-2 border-indigo-600 text-indigo-600" data-tab="quiz">Quiz</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div id="tab-content-theory" class="p-4 bg-gray-50 rounded-lg max-h-[400px] overflow-y-auto hidden">
+                <h4 class="text-2xl font-semibold mb-3 text-indigo-700" id="theory-topic-title"></h4>
+                <div id="theory-content" class="prose max-w-none text-gray-700">
+                    <!-- Theory content will be inserted here -->
+                </div>
+                <button id="back-to-selection-btn" class="mt-6 px-4 py-2 bg-pink-500 text-white font-bold rounded-lg hover:bg-pink-600 transition duration-150">Back to Topic Selection</button>
+            </div>
+
+
+            <div id="tab-content-quiz">
+                <div id="quiz-selection" class="space-y-6">
+                    <p class="text-gray-700 text-lg font-semibold">Select a Topic to Start Your Challenge:</p>
+                    <div id="topic-buttons" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Topic buttons will be inserted here -->
+                    </div>
+                </div>
+
+                <div id="quiz-container" class="hidden">
+                    <p class="text-lg font-semibold mb-2 text-pink-600">Topic: <span id="quiz-topic-display"></span></p>
+                    <div id="quiz-progress" class="mb-4">
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div id="progress-bar" class="bg-green-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1"><span id="current-q">1</span>/<span id="total-q">10</span></p>
+                    </div>
+                    
+                    <p id="quiz-question" class="text-xl font-medium mb-6 text-gray-800 p-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-300"></p>
+                    
+                    <div id="quiz-options" class="space-y-3">
+                        <!-- Options buttons will be inserted here -->
+                    </div>
+
+                    <div class="flex justify-between mt-8">
+                        <button id="next-q-btn" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition duration-150 shadow-lg hidden">Next Question</button>
+                        <button id="finish-quiz-btn" class="px-6 py-3 bg-pink-600 text-white font-bold rounded-xl hover:bg-pink-700 transition duration-150 shadow-lg hidden">Finish & Submit Score</button>
+                    </div>
+                </div>
+            </div>
+
+
+             <button type="button" id="close-quiz-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition">
+                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+             </button>
+        </div>
+    </div>
+    
+    <!-- Custom Modal for Admin Actions (Penalty/Kick Confirmation) -->
+    <div id="admin-action-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-6 border w-96 shadow-xl rounded-xl bg-white">
+            <h3 id="admin-action-title" class="text-xl font-bold mb-4 text-red-700">Confirm Action</h3>
+            <p id="admin-action-message" class="mb-4 text-gray-700"></p>
+            <input type="text" id="admin-target-id" required placeholder="Enter target Student ID (e.g., 9-A-S001)" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 mb-4">
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="admin-cancel-btn" class="px-4 py-2 text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-100 transition duration-150">Cancel</button>
+                <button type="button" id="admin-confirm-btn" class="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition duration-150 shadow-md">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- JavaScript Logic -->
     <script type="module">
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
@@ -156,94 +317,232 @@
             onSnapshot, 
             collection, 
             query, 
-            orderBy, // We will sort client-side, but keep it available if needed for filtering
-            where,
             runTransaction,
+            deleteDoc, 
             setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAspAFZvTLXtg6yzxRGZYmrNoNm2tr1T7g",
-  authDomain: "superstaracademy.firebaseapp.com",
-  projectId: "superstaracademy",
-  storageBucket: "superstaracademy.firebasestorage.app",
-  messagingSenderId: "1084907814138",
-  appId: "1:1084907814138:web:512b9a68de6acd99389d43",
-  measurementId: "G-R06VBGG0VL"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-
-        // Set Firebase Log Level to Debug for development visibility
+        // Set Firebase logging level for debugging issues
         setLogLevel('Debug');
 
-        // --- GLOBAL VARIABLES (provided by environment or manually set) ---
-        // The __app_id is used in the Firestore path.
+        // --- STATIC QUIZ CONTENT (GSEB Vocabulary & Grammar Focus) ---
+        const QUIZ_DATA = {
+            'Vocabulary & Synonyms': {
+                theory: `
+                    <p><strong>Theory: Expanding your Lexicon</strong></p>
+                    <p>Vocabulary is the foundation of effective communication. Focus on understanding the subtle shades of meaning (connotations) and how words function (part of speech).</p>
+                    <h5 class="text-xl font-semibold mt-4">Key Strategies:</h5>
+                    <ul>
+                        <li><strong>Context Clues:</strong> Determine word meaning from the surrounding text.</li>
+                        <li><strong>Root Words:</strong> Recognize prefixes, suffixes, and roots (e.g., 'bene' means good, 'mal' means bad).</li>
+                        <li><strong>Synonyms/Antonyms:</strong> Grouping words by similar/opposite meanings helps recall and usage.</li>
+                    </ul>
+                `,
+                questions: [
+                    { q: "Choose the synonym for 'Eloquent'.", a: "Fluent", options: ["Silent", "Tired", "Fluent", "Weak"] },
+                    { q: "What is the synonym for 'Apprehend'?", a: "Understand", options: ["Release", "Dislike", "Understand", "Reject"] },
+                    { q: "Identify the synonym for 'Ponder'.", a: "Contemplate", options: ["Ignore", "Contemplate", "Rush", "Destroy"] },
+                    { q: "The word 'Exquisite' means:", a: "Extremely beautiful", options: ["Very common", "Extremely beautiful", "Quick to break", "Hard to find"] },
+                    { q: "Synonym of 'Abundant':", a: "Plentiful", options: ["Scarce", "Few", "Plentiful", "Empty"] },
+                    { q: "What is the meaning of 'Mitigate'?", a: "Lessen the severity of", options: ["Increase", "Intensify", "Lessen the severity of", "Create"] },
+                    { q: "Choose the synonym for 'Vigilant'.", a: "Watchful", options: ["Sleepy", "Careless", "Watchful", "Happy"] },
+                    { q: "Synonym of 'Ephemeral':", a: "Short-lived", options: ["Permanent", "Short-lived", "Eternal", "Dull"] },
+                    { q: "Synonym of 'Oust':", a: "Expel", options: ["Invite", "Welcome", "Expel", "Gather"] },
+                    { q: "The word 'Turbulent' is synonymous with:", a: "Stormy", options: ["Calm", "Peaceful", "Stormy", "Quiet"] },
+                ],
+            },
+            'Advanced Grammar (Tenses & Voice)': {
+                theory: `
+                    <p><strong>Theory: Mastery of Tenses and Voice</strong></p>
+                    <p>English grammar relies heavily on precise tense usage and understanding the active/passive voice distinction.</p>
+                    <h5 class="text-xl font-semibold mt-4">Key Concepts:</h5>
+                    <ul>
+                        <li><strong>Perfect Tenses:</strong> Use Perfect tenses (Present/Past/Future) to show an action completed before another action or point in time.</li>
+                        <li><strong>Continuous Tenses:</strong> Use Continuous tenses for ongoing actions.</li>
+                        <li><strong>Passive Voice:</strong> The subject receives the action (e.g., 'The ball <em>was kicked</em> by the boy'). Use it to emphasize the action or object, not the actor.</li>
+                    </ul>
+                `,
+                questions: [
+                    { q: "Which of the following is Present Perfect Continuous Tense?", a: "She has been teaching for two hours.", options: ["She taught yesterday.", "She is teaching now.", "She has been teaching for two hours.", "She will teach tomorrow."] },
+                    { q: "Passive voice of: 'Someone cleaned the windows yesterday.'", a: "The windows were cleaned yesterday.", options: ["The windows are cleaned yesterday.", "The windows were cleaned yesterday.", "The windows had been cleaned.", "The windows will be cleaned."] },
+                    { q: "Change to Active Voice: 'The novel was read by the student.'", a: "The student read the novel.", options: ["The novel read the student.", "The student is reading the novel.", "The student read the novel.", "The student has read the novel."] },
+                    { q: "Identify the correct Future Perfect Tense sentence.", a: "By next year, I will have finished my degree.", options: ["I finish my degree.", "I am finishing my degree.", "By next year, I will have finished my degree.", "I will be finishing my degree."] },
+                    { q: "Fill in the blank: 'He _____ (go) to Mumbai last week.'", a: "went", options: ["goes", "has gone", "went", "is going"] },
+                    { q: "Fill in the blank: 'If I had studied, I _____ (pass) the exam.'", a: "would have passed", options: ["will pass", "would pass", "would have passed", "passed"] },
+                    { q: "The sentence 'The dog ate the bone' is in which voice?", a: "Active Voice", options: ["Passive Voice", "Active Voice", "Direct Speech", "Indirect Speech"] },
+                    { q: "Correct structure for Conditional Type 3:", a: "If + Past Perfect, would have + V3", options: ["If + Simple Present, Future Simple", "If + Simple Past, would + V1", "If + Past Perfect, would have + V3", "If + Present Continuous, Future Continuous"] },
+                    { q: "Convert to Passive: 'Do not tell lies.'", a: "Let lies not be told.", options: ["Lies are not told.", "Let lies not be told.", "Lies were not told.", "You are asked to not tell lies."] },
+                ],
+            },
+            'Reported Speech & Idioms': {
+                theory: `
+                    <p><strong>Theory: Mastering Indirect Narration and Figurative Language</strong></p>
+                    <p>Reported (Indirect) Speech requires specific shifts in tense and pronouns. Idioms are expressions whose meanings cannot be inferred from the meanings of the individual words.</p>
+                    <h5 class="text-xl font-semibold mt-4">Key Concepts:</h5>
+                    <ul>
+                        <li><strong>Tense Backshift:</strong> Simple Present $\\rightarrow$ Simple Past, Simple Past $\\rightarrow$ Past Perfect.</li>
+                        <li><strong>Time/Place Change:</strong> 'Now' $\\rightarrow$ 'then', 'here' $\\rightarrow$ 'there'.</li>
+                        <li><strong>Idioms:</strong> Must be learned as a unit. E.g., 'to kill two birds with one stone' means to achieve two things with a single effort.</li>
+                    </ul>
+                `,
+                questions: [
+                    { q: "Indirect Speech of: 'He said, \"I am going to school.\"'", a: "He said that he was going to school.", options: ["He said he is going to school.", "He said that he was going to school.", "He said that I am going to school.", "He said I went to school."] },
+                    { q: "What does the idiom 'Bite the bullet' mean?", a: "To face a difficult situation with courage.", options: ["To eat quickly.", "To criticize someone severely.", "To face a difficult situation with courage.", "To tell a secret."] },
+                    { q: "What does the idiom 'Break the ice' mean?", a: "To start a conversation in a stiff situation.", options: ["To make something cold.", "To start a conversation in a stiff situation.", "To finish a task.", "To destroy a relationship."] },
+                    { q: "Indirect Speech of: 'The teacher ordered, \"Open your books.\"", a: "The teacher ordered us to open our books.", options: ["The teacher said to open your books.", "The teacher ordered us to open our books.", "The teacher asked if we opened the books.", "The teacher commanded that we open the books."] },
+                    { q: "Meaning of 'A storm in a teacup'.", a: "A lot of fuss about something minor.", options: ["A dangerous disaster.", "A lot of fuss about something minor.", "A serious problem.", "A relaxing drink."] },
+                    { q: "Meaning of 'To smell a rat'.", a: "To suspect a trick or deceit.", options: ["To have a poor sense of smell.", "To find food.", "To suspect a trick or deceit.", "To be confused."] },
+                    { q: "Indirect Speech of: 'They said, \"We finished the work.\"", a: "They said that they had finished the work.", options: ["They said they finished the work.", "They said that they had finished the work.", "They said they were finishing the work.", "They said we finished the work."] },
+                    { q: "What does 'To be on thin ice' mean?", a: "To be in a risky situation.", options: ["To be successful.", "To be in a risky situation.", "To walk carefully.", "To feel comfortable."] },
+                    { q: "Indirect Speech of: 'I said to her, \"You must go.\"", a: "I told her that she had to go.", options: ["I said that she must go.", "I told her that she had to go.", "I said she is going.", "I asked her to go."] },
+                ],
+            },
+            'Reading Comprehension/Prose': {
+                theory: `
+                    <p><strong>Theory: Effective Reading Strategies</strong></p>
+                    <p>Reading comprehension requires both speed and depth. You must understand not just what the text says, but what it implies (inference).</p>
+                    <h5 class="text-xl font-semibold mt-4">Key Strategies:</h5>
+                    <ul>
+                        <li><strong>Skimming:</strong> Reading quickly to grasp the main idea.</li>
+                        <li><strong>Scanning:</strong> Looking for specific keywords or details.</li>
+                        <li><strong>Inferencing:</strong> Drawing conclusions based on evidence in the text, even if not explicitly stated.</li>
+                    </ul>
+                `,
+                questions: [
+                    { q: "The author mentions that 'The factory, built in 1950, was the heartbeat of the town.' What literary device is used here?", a: "Metaphor", options: ["Simile", "Hyperbole", "Personification", "Metaphor"] },
+                    { q: "Based on the text: 'The sky turned an ominous grey, and the birds fell silent.' What can you infer is about to happen?", a: "A storm is approaching.", options: ["It is dawn.", "A large feast is starting.", "A storm is approaching.", "A parade is beginning."] },
+                    { q: "Which of the following is an opinion, not a fact?", a: "Chocolate ice cream is the best dessert.", options: ["The earth is round.", "The capital of India is New Delhi.", "Chocolate ice cream is the best dessert.", "Water boils at 100 degrees Celsius."] },
+                    { q: "If a character is described as 'reserved and cautious,' what is a likely action they would take?", a: "Observe others before speaking.", options: ["Shout immediately.", "Observe others before speaking.", "Make quick, risky decisions.", "Run away quickly."] },
+                    { q: "What is the primary purpose of a narrative text?", a: "To tell a story.", options: ["To inform.", "To persuade.", "To tell a story.", "To argue a point."] },
+                    { q: "In the sentence, 'The crowd roared like a lion,' what is the literal subject being described?", a: "The crowd.", options: ["A lion.", "The sound.", "The crowd.", "The jungle."] },
+                ]
+            },
+            'Writing Skills & Composition': {
+                theory: `
+                    <p><strong>Theory: Structuring Strong Compositions</strong></p>
+                    <p>Effective writing requires clarity, coherence, and correct structure, whether you are writing an essay, a report, or a letter.</p>
+                    <h5 class="text-xl font-semibold mt-4">Key Concepts:</h5>
+                    <ul>
+                        <li><strong>Topic Sentence:</strong> Every body paragraph must begin with one, stating the paragraph's main idea.</li>
+                        <li><strong>Coherence:</strong> Use transition words (e.g., 'However', 'Furthermore', 'Consequently') to link ideas smoothly.</li>
+                        <li><strong>Formal vs. Informal:</strong> Choose vocabulary and tone appropriate for the audience (e.g., avoiding slang in a formal letter).</li>
+                    </ul>
+                `,
+                questions: [
+                    { q: "Which part of an essay outlines the main arguments and states the thesis?", a: "Introduction", options: ["Body Paragraphs", "Conclusion", "Introduction", "Hook"] },
+                    { q: "What is the best transition word to use when introducing a contrasting idea?", a: "However", options: ["Therefore", "Similarly", "Moreover", "However"] },
+                    { q: "In a formal letter, which salutation is generally appropriate?", a: "Dear Sir/Madam", options: ["Hey there", "Dear buddy", "Dear Sir/Madam", "Yo"] },
+                    { q: "What should a strong concluding paragraph primarily do?", a: "Summarize the main points and restate the thesis.", options: ["Introduce a new argument.", "Ask a rhetorical question.", "Summarize the main points and restate the thesis.", "Tell a personal story."] },
+                    { q: "Which sentence demonstrates the best use of active voice?", a: "The committee approved the budget.", options: ["The budget was approved by the committee.", "The budget had been approved.", "The committee approved the budget.", "Approval of the budget was done."] },
+                    { q: "The function of a topic sentence is to:", a: "State the main idea of a paragraph.", options: ["Provide evidence.", "State the main idea of a paragraph.", "Conclude the essay.", "Start a new section."] },
+                ]
+            }
+        };
+        
+        // --- GLOBAL VARIABLES ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'superstar-english-academy';
         
         // --- FIREBASE CONFIGURATION ---
-        // CRITICAL FIX: Prioritize Canvas-provided config (__firebase_config) 
-        // over the hardcoded placeholder to ensure authentication works.
         const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyAspAFZvTLXtg6yzxRGZYmrNoNm2tr1T7g",
-            authDomain: "superstaracademy.firebaseapp.com",
-            projectId: "superstaracademy",
-            storageBucket: "superstaracademy.firebasestorage.app",
-            messagingSenderId: "1084907814138",
-            appId: "1:1084907814138:web:512b9a68de6acd99389d43",
-            measurementId: "G-R06VBGG0VL"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID",
+            measurementId: "YOUR_MEASUREMENT_ID"
         };
         
         let firebaseConfig;
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            // Use config provided by the Canvas environment
             firebaseConfig = JSON.parse(__firebase_config);
         } else {
-            // Use the manual config (e.g., if running outside Canvas)
+            // Use dummy config if not provided, though this will likely fail
             firebaseConfig = MANUAL_FIREBASE_CONFIG;
         }
 
-        // The provided authentication token from the environment
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // --- APP INITIALIZATION ---
+        // --- APP STATE ---
         let app, db, auth;
         let currentUserId = null;
-        let currentStudentData = null; // Store current logged-in student's data
-        let isAuthReady = false;
+        let currentStudentData = null; 
+        
+        let currentQuiz = {
+            topic: null,
+            questions: [],
+            currentQuestionIndex: 0,
+            score: 0,
+        };
 
+        // --- DOM ELEMENTS ---
+        const globalLoader = document.getElementById('global-loader');
+        const appContainer = document.getElementById('app');
         const statusMessageEl = document.getElementById('status-message');
         const mainContentEl = document.getElementById('main-content');
+        const securityWarningEl = document.getElementById('security-warning');
         const registrationCardEl = document.getElementById('registration-card');
         const profileCardEl = document.getElementById('profile-card');
         const registrationForm = document.getElementById('registration-form');
         const checkInBtn = document.getElementById('check-in-btn');
-        const showScoreModalBtn = document.getElementById('show-score-modal-btn');
-        const scoreModal = document.getElementById('score-modal');
+        const actionBtn = document.getElementById('action-btn'); 
+        const signOutBtn = document.getElementById('sign-out-btn'); 
+        const scoreModal = document.getElementById('score-modal'); 
         const scoreForm = document.getElementById('score-form');
         const closeModalBtn = document.getElementById('close-modal-btn');
+        const leaderboardBody = document.getElementById('leaderboard-body');
+        
+        // Quiz Modal Elements
+        const quizModal = document.getElementById('quiz-modal');
+        const closeQuizModalBtn = document.getElementById('close-quiz-modal-btn');
+        const quizLoadingMessage = document.getElementById('quiz-loading-message');
+        const quizSelectionEl = document.getElementById('quiz-selection');
+        const quizContainerEl = document.getElementById('quiz-container');
+        const quizQuestionEl = document.getElementById('quiz-question');
+        const quizOptionsEl = document.getElementById('quiz-options');
+        const nextQBtn = document.getElementById('next-q-btn');
+        const finishQuizBtn = document.getElementById('finish-quiz-btn');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContentTheory = document.getElementById('tab-content-theory');
+        const tabContentQuiz = document.getElementById('tab-content-quiz');
+        const theoryTopicTitle = document.getElementById('theory-topic-title');
+        const theoryContent = document.getElementById('theory-content');
+        const backToSelectionBtn = document.getElementById('back-to-selection-btn');
+        
+        // Admin Action Elements
+        const adminActionsBlock = document.getElementById('admin-actions-block');
+        const penaltyBtn = document.getElementById('penalty-btn');
+        const kickBtn = document.getElementById('kick-btn');
+        const adminActionModal = document.getElementById('admin-action-modal');
+        const adminActionTitle = document.getElementById('admin-action-title');
+        const adminActionMessage = document.getElementById('admin-action-message');
+        const adminTargetIdInput = document.getElementById('admin-target-id');
+        const adminCancelBtn = document.getElementById('admin-cancel-btn');
+        const adminConfirmBtn = document.getElementById('admin-confirm-btn');
+
 
         // Utility to display status messages
         function showStatus(message, isError = false) {
             statusMessageEl.textContent = message;
             statusMessageEl.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
+            
             if (isError) {
                 statusMessageEl.classList.add('bg-red-100', 'text-red-700');
+                securityWarningEl.classList.remove('hidden');
+                console.error("STATUS ERROR:", message);
             } else {
                 statusMessageEl.classList.add('bg-blue-100', 'text-blue-700');
+                securityWarningEl.classList.add('hidden');
+                console.log("STATUS INFO:", message);
             }
-            setTimeout(() => {
-                statusMessageEl.classList.add('hidden');
-            }, 5000);
+            
+            statusMessageEl.classList.remove('hidden');
+            // Remove status after 5 seconds unless it's a critical error
+            if (!isError) {
+                setTimeout(() => {
+                    statusMessageEl.classList.add('hidden');
+                }, 5000);
+            }
         }
 
         // Helper function to get the current date key (YYYY-MM-DD)
@@ -254,44 +553,75 @@ const analytics = getAnalytics(app);
         // Helper function to calculate the time difference in days
         function daysBetween(date1, date2) {
             const ONE_DAY = 1000 * 60 * 60 * 24;
-            const diffTime = Math.abs(date2 - date1);
+            const d1 = new Date(date1).setHours(0, 0, 0, 0);
+            const d2 = new Date(date2).setHours(0, 0, 0, 0);
+            const diffTime = Math.abs(d2 - d1);
             return Math.ceil(diffTime / ONE_DAY);
         }
-
 
         // --- FIREBASE INITIALIZATION & AUTHENTICATION ---
         async function initializeFirebase() {
             try {
-                showStatus("Connecting to Firebase...");
+                // 1. Initialize App
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                
-                // CRITICAL FIX: Use the initialAuthToken if provided, otherwise sign in anonymously.
+
+                // 2. Authenticate the user
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
-                    showStatus("Signed in with custom token.", false);
                 } else {
-                    // Fallback to anonymous sign-in if no token is available
                     await signInAnonymously(auth); 
-                    showStatus("Signed in anonymously.", false);
                 }
-
-                currentUserId = auth.currentUser.uid;
                 
-                isAuthReady = true;
-                mainContentEl.classList.remove('hidden');
-                showStatus("Connection successful. Ready.", false);
+                // 3. Set up the Auth State Listener (Critical for permissions)
+                onAuthStateChanged(auth, (user) => {
+                    globalLoader.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    
+                    if (user) {
+                        currentUserId = user.uid;
+                        // Now that auth is confirmed, initialize data listeners and UI
+                        mainContentEl.classList.remove('hidden');
+                        setupLeaderboardListener();
+                        // Reset UI to expect registration/sign-in until data is loaded
+                        updateProfileUI(null); 
+                        showStatus("Connection successful. Ready to register/sign in.", false);
+                    } else {
+                        currentUserId = null;
+                        currentStudentData = null;
+                        updateProfileUI(null);
+                        mainContentEl.classList.remove('hidden');
+                        showStatus("Signed out. Please register or sign in.", false);
+                    }
+                });
 
             } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                showStatus("Error connecting to Firebase. Check console for details (auth/configuration-not-found often means wrong config is used).", true);
+                // Ensure loader hides even on failure so the user sees the error
+                globalLoader.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                console.error("Firebase Initialization/Authentication failed:", error);
+                showStatus(`CRITICAL ERROR: Failed to initialize Firebase or authenticate. Check console for details. Error: ${error.message}`, true);
+                
+                // Show registration form only as a fallback
+                registrationCardEl.classList.remove('hidden');
+                profileCardEl.classList.add('hidden');
+            }
+        }
+        
+        // --- SIGN OUT HANDLER ---
+        async function handleSignOut() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Sign Out failed:", error);
+                showStatus("Failed to sign out. Please try again.", true);
             }
         }
 
+
         // --- DATA PATH UTILITIES ---
         function getStudentCollectionRef() {
-            // Public path for the student leaderboard data
             return collection(db, `artifacts/${appId}/public/data/students`);
         }
 
@@ -301,62 +631,72 @@ const analytics = getAnalytics(app);
 
         // --- CORE APPLICATION LOGIC ---
 
-        // 1. Student Registration
+        // 1. Student/Admin Registration
         function createStudentId(rollNo, className) {
-            // Create a consistent, unique ID based on input data
-            return `${className.trim().toUpperCase()}-${rollNo.trim().toUpperCase()}`;
+            const r = rollNo.trim().toUpperCase();
+            const c = className.trim().toUpperCase();
+            if (r === '999' && c === 'TEACHER/ADMIN') {
+                 return `ADMIN-${r}`;
+            }
+            return `${c}-${r}`;
         }
 
         async function registerStudent(rollNo, className) {
+            if (!currentUserId) {
+                 showStatus("Authentication pending or failed. Cannot proceed.", true);
+                 return;
+            }
+            
             const studentId = createStudentId(rollNo, className);
             const studentDocRef = getStudentDocRef(studentId);
+            const isAdministrator = rollNo.trim().toUpperCase() === '999' && className.trim().toUpperCase() === 'TEACHER/ADMIN';
+            const role = isAdministrator ? 'admin' : 'student';
+            const displayClassName = className.trim().toUpperCase();
 
             try {
                 const docSnap = await getDoc(studentDocRef);
 
                 if (docSnap.exists()) {
-                    showStatus("Student already registered. Signing in...", false);
                     currentStudentData = docSnap.data();
+                    showStatus(`${role === 'admin' ? 'Admin' : 'Student'} sign-in successful.`, false);
                 } else {
                     const today = getDateKey();
                     const newStudentData = {
                         studentId: studentId,
                         rollNo: rollNo.trim().toUpperCase(),
-                        className: className.trim().toUpperCase(),
+                        className: displayClassName,
+                        role: role, 
                         totalScore: 0,
                         streak: 0,
-                        lastCheckIn: null, // No check-in yet
+                        lastCheckIn: null, 
                         registrationDate: today,
                         lastScoreLog: null,
                     };
                     
                     await setDoc(studentDocRef, newStudentData);
                     currentStudentData = newStudentData;
-                    showStatus("Registration successful! Welcome.", false);
+                    showStatus(`${role === 'admin' ? 'Admin' : 'Student'} registration successful!`, false);
                 }
                 
-                // Once data is retrieved or created, update UI
                 updateProfileUI(currentStudentData);
                 
             } catch (error) {
                 console.error("Registration/Sign-in failed:", error);
-                showStatus("Failed to register or sign in. Check security rules and console.", true);
+                showStatus("Failed to register or sign in. Check console for details. (Possible Security Rules error on write/read)", true);
             }
         }
 
         // 2. Daily Check-in Logic
         async function handleCheckIn() {
-            if (!currentStudentData) {
+            if (!currentStudentData || !currentUserId) {
                 showStatus("Please register or sign in first.", true);
                 return;
             }
 
             const todayKey = getDateKey();
-            const lastCheckIn = currentStudentData.lastCheckIn;
             const studentDocRef = getStudentDocRef(currentStudentData.studentId);
             
-            // Check if already checked in today
-            if (lastCheckIn === todayKey) {
+            if (currentStudentData.lastCheckIn === todayKey) {
                 showStatus("You have already checked in today!", false);
                 return;
             }
@@ -373,22 +713,17 @@ const analytics = getAnalytics(app);
                     let message = "Check-in recorded!";
 
                     if (existingData.lastCheckIn) {
-                        const lastDate = new Date(existingData.lastCheckIn);
-                        const todayDate = new Date();
-                        const daysDiff = daysBetween(lastDate, todayDate);
+                        const lastDate = existingData.lastCheckIn;
+                        const daysDiff = daysBetween(lastDate, todayKey);
 
                         if (daysDiff === 1) {
-                            // Check-in continuation
                             newStreak += 1;
                             message = `Daily Check-in successful! Streak is now ${newStreak} days!`;
                         } else if (daysDiff > 1) {
-                            // Streak broken
                             newStreak = 1;
                             message = "Welcome back! Your streak was reset. Streak is now 1 day.";
                         } 
-                        // If daysDiff is 0, handled above (already checked in)
                     } else {
-                        // First-ever check-in
                         newStreak = 1;
                         message = "First check-in recorded! Start your streak!";
                     }
@@ -400,172 +735,515 @@ const analytics = getAnalytics(app);
                     };
 
                     transaction.set(studentDocRef, newCheckInData);
-                    currentStudentData = newCheckInData; // Update local state
+                    currentStudentData = newCheckInData; 
                     showStatus(message, false);
                 });
             } catch (error) {
                 console.error("Check-in transaction failed:", error);
-                showStatus("Check-in failed. Please try again.", true);
+                showStatus(`Check-in failed. Error: ${error.message || error}`, true);
             }
         }
+        
+        // 3. Admin Actions (Penalty and Kick)
 
-        // 3. Log Score Logic
-        async function handleLogScore(score) {
-            if (!currentStudentData) {
-                showStatus("Please register or sign in first.", true);
+        async function applyScoreChange(studentId, scoreChange, action) {
+            if (currentStudentData?.role !== 'admin') return;
+            
+            if (!studentId) {
+                showStatus("Target Student ID cannot be empty.", true);
                 return;
             }
-
-            const todayKey = getDateKey();
-            const studentDocRef = getStudentDocRef(currentStudentData.studentId);
+            
+            const studentDocRef = getStudentDocRef(studentId);
 
             try {
                 await runTransaction(db, async (transaction) => {
                     const docSnap = await transaction.get(studentDocRef);
+                    
                     if (!docSnap.exists()) {
-                        throw "Student document does not exist!";
-                    }
-
-                    const existingData = docSnap.data();
-                    const scoreInt = parseInt(score, 10);
-
-                    if (isNaN(scoreInt) || scoreInt < 0 || scoreInt > 100) {
-                        throw "Invalid score input.";
+                        throw new Error("Target student ID not found.");
                     }
                     
-                    const newTotalScore = existingData.totalScore + scoreInt;
+                    const existingData = docSnap.data();
+                    const newTotalScore = existingData.totalScore + scoreChange;
 
-                    const newScoreLogData = {
+                    const newUpdateData = {
+                        ...existingData,
+                        totalScore: newTotalScore,
+                        lastScoreLog: getDateKey(), // Log that a score action occurred
+                    };
+
+                    transaction.set(studentDocRef, newUpdateData);
+                });
+
+                showStatus(`Successfully applied ${action} (${scoreChange} pts) to ${studentId}. New score is calculated.`, false);
+
+            } catch (error) {
+                console.error(`${action} failed:`, error);
+                showStatus(`${action} failed: ${error.message || error}`, true);
+            }
+        }
+
+        async function kickStudent(studentId) {
+            if (currentStudentData?.role !== 'admin') return;
+            
+            if (!studentId) {
+                showStatus("Target Student ID cannot be empty.", true);
+                return;
+            }
+
+            const studentDocRef = getStudentDocRef(studentId);
+            
+            try {
+                const docSnap = await getDoc(studentDocRef);
+                if (!docSnap.exists()) {
+                    showStatus(`Student ${studentId} not found in database.`, true);
+                    return;
+                }
+                
+                // Delete the student's document
+                await deleteDoc(studentDocRef);
+                showStatus(`Student ${studentId} successfully kicked and removed from the academy records.`, false);
+                
+            } catch (error) {
+                console.error("Kick/Remove Student failed:", error);
+                showStatus(`Kick/Remove Student failed: ${error.message || error}`, true);
+            }
+        }
+        
+        // Admin: Manual Score Logging
+        async function handleScoreLog(e) {
+            e.preventDefault();
+            if (currentStudentData?.role !== 'admin') return;
+
+            const studentId = document.getElementById('target-student-id').value.trim();
+            const score = parseInt(document.getElementById('daily-score').value, 10);
+            
+            if (!studentId || isNaN(score) || score < 0 || score > 100) {
+                showStatus("Invalid Student ID or Score (must be 0-100).", true);
+                return;
+            }
+
+            const studentDocRef = getStudentDocRef(studentId);
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const docSnap = await transaction.get(studentDocRef);
+                    
+                    if (!docSnap.exists()) {
+                        throw new Error("Target student ID not found.");
+                    }
+                    
+                    const existingData = docSnap.data();
+                    const newTotalScore = existingData.totalScore + score;
+
+                    const newLogData = {
+                        ...existingData,
+                        totalScore: newTotalScore,
+                        lastScoreLog: getDateKey(),
+                    };
+
+                    transaction.set(studentDocRef, newLogData);
+                });
+
+                showStatus(`Successfully logged score of ${score} for ${studentId}.`, false);
+                scoreModal.classList.add('hidden');
+                scoreForm.reset();
+
+            } catch (error) {
+                console.error("Score logging transaction failed:", error);
+                showStatus(`Score logging failed: ${error.message || error}`, true);
+            }
+        }
+        
+        // 4. Student Quiz Logic (Simplified)
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function setupQuizSelection() {
+            // Hide everything except selection
+            tabContentTheory.classList.add('hidden');
+            quizContainerEl.classList.add('hidden');
+            quizSelectionEl.classList.remove('hidden');
+            
+            // Set Quiz tab as active
+            document.getElementById('tab-quiz').classList.add('border-indigo-600', 'text-indigo-600');
+            document.getElementById('tab-quiz').classList.remove('border-transparent', 'text-gray-500');
+            document.getElementById('tab-theory').classList.add('border-transparent', 'text-gray-500');
+            document.getElementById('tab-theory').classList.remove('border-indigo-600', 'text-indigo-600');
+            
+            const topicButtonsContainer = document.getElementById('topic-buttons');
+            topicButtonsContainer.innerHTML = '';
+            
+            Object.keys(QUIZ_DATA).forEach(topic => {
+                const button = document.createElement('button');
+                button.textContent = topic;
+                button.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition duration-150 ease-in-out shadow-lg";
+                button.onclick = () => showTopicDetails(topic);
+                topicButtonsContainer.appendChild(button);
+            });
+        }
+        
+        function showTopicDetails(topic) {
+            // Set theory content
+            theoryTopicTitle.textContent = topic;
+            theoryContent.innerHTML = QUIZ_DATA[topic].theory;
+            
+            // Allow user to click the Quiz tab
+            document.getElementById('tab-quiz').onclick = () => startQuiz(topic);
+            
+            // Switch to Theory view initially
+            switchTab('theory');
+        }
+
+        function startQuiz(topic) {
+            // Show Quiz content, hide Theory
+            switchTab('quiz');
+            
+            // Show loading message while preparing quiz
+            quizSelectionEl.classList.add('hidden');
+            quizContainerEl.classList.add('hidden');
+            quizLoadingMessage.classList.remove('hidden');
+
+            setTimeout(() => {
+                // Actual Quiz preparation (simulating brief network delay)
+                currentQuiz.topic = topic;
+                // Get 10 random questions from the pool
+                const shuffledQuestions = shuffle([...QUIZ_DATA[topic].questions]);
+                currentQuiz.questions = shuffledQuestions.slice(0, 10);
+                currentQuiz.currentQuestionIndex = 0;
+                currentQuiz.score = 0;
+                
+                document.getElementById('quiz-topic-display').textContent = topic;
+                document.getElementById('total-q').textContent = currentQuiz.questions.length;
+                
+                quizLoadingMessage.classList.add('hidden');
+                quizContainerEl.classList.remove('hidden');
+                
+                loadQuestion();
+            }, 500); // Simulate 0.5 sec load time
+        }
+        
+        function switchTab(tabName) {
+             // Deactivate all
+             tabButtons.forEach(btn => {
+                 btn.classList.remove('border-indigo-600', 'text-indigo-600');
+                 btn.classList.add('border-transparent', 'text-gray-500');
+             });
+             tabContentTheory.classList.add('hidden');
+             tabContentQuiz.classList.add('hidden');
+             
+             // Activate selected tab
+             if (tabName === 'theory') {
+                 document.getElementById('tab-theory').classList.add('border-indigo-600', 'text-indigo-600');
+                 tabContentTheory.classList.remove('hidden');
+                 tabContentQuiz.classList.remove('hidden'); // Keep quiz content container visible
+                 quizSelectionEl.classList.add('hidden');
+                 quizContainerEl.classList.add('hidden');
+
+             } else if (tabName === 'quiz') {
+                 document.getElementById('tab-quiz').classList.add('border-indigo-600', 'text-indigo-600');
+                 tabContentQuiz.classList.remove('hidden');
+                 // Ensure we show the correct state (selection or ongoing quiz)
+                 if (currentQuiz.questions.length > 0) {
+                     quizContainerEl.classList.remove('hidden');
+                 } else {
+                     quizSelectionEl.classList.remove('hidden');
+                 }
+             }
+        }
+
+        function loadQuestion() {
+            const index = currentQuiz.currentQuestionIndex;
+            const questionData = currentQuiz.questions[index];
+            
+            document.getElementById('current-q').textContent = index + 1;
+            document.getElementById('progress-bar').style.width = `${((index) / currentQuiz.questions.length) * 100}%`;
+            quizQuestionEl.textContent = `${index + 1}. ${questionData.q}`;
+            quizOptionsEl.innerHTML = '';
+            
+            nextQBtn.classList.add('hidden');
+            finishQuizBtn.classList.add('hidden');
+
+            const shuffledOptions = shuffle([...questionData.options]);
+            
+            shuffledOptions.forEach(option => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.className = 'quiz-option-btn';
+                button.onclick = () => selectOption(button, option, questionData.a);
+                quizOptionsEl.appendChild(button);
+            });
+        }
+        
+        function selectOption(selectedButton, selectedAnswer, correctAnswer) {
+            // Disable all buttons
+            Array.from(quizOptionsEl.children).forEach(btn => btn.disabled = true);
+            
+            if (selectedAnswer === correctAnswer) {
+                selectedButton.classList.add('correct');
+                currentQuiz.score += 10; // 10 points per correct answer
+            } else {
+                selectedButton.classList.add('incorrect');
+                // Highlight correct answer if incorrect choice was made
+                Array.from(quizOptionsEl.children).find(btn => btn.textContent === correctAnswer).classList.add('correct');
+            }
+            
+            const isLastQuestion = currentQuiz.currentQuestionIndex === currentQuiz.questions.length - 1;
+
+            if (isLastQuestion) {
+                finishQuizBtn.classList.remove('hidden');
+            } else {
+                nextQBtn.classList.remove('hidden');
+            }
+        }
+
+        function nextQuestion() {
+            currentQuiz.currentQuestionIndex++;
+            loadQuestion();
+        }
+
+        async function handleQuizAttempt() {
+            if (currentStudentData.lastScoreLog === getDateKey()) {
+                showStatus("You have already submitted a quiz score today!", false);
+                quizModal.classList.add('hidden');
+                return;
+            }
+
+            const studentDocRef = getStudentDocRef(currentStudentData.studentId);
+            const score = currentQuiz.score; // Max 100 points
+            const todayKey = getDateKey();
+
+            try {
+                 await runTransaction(db, async (transaction) => {
+                    const docSnap = await transaction.get(studentDocRef);
+                    if (!docSnap.exists()) {
+                        throw "Student document does not exist during score submission!";
+                    }
+                    
+                    const existingData = docSnap.data();
+                    
+                    if (existingData.lastScoreLog === todayKey) {
+                        throw new Error("Quiz score already logged today.");
+                    }
+
+                    const newTotalScore = existingData.totalScore + score;
+
+                    const newLogData = {
                         ...existingData,
                         totalScore: newTotalScore,
                         lastScoreLog: todayKey,
                     };
 
-                    transaction.set(studentDocRef, newScoreLogData);
-                    currentStudentData = newScoreLogData; // Update local state
-                    showStatus(`Score of ${scoreInt} logged successfully. Total score: ${newTotalScore}`, false);
-                    document.getElementById('daily-score').value = ''; // Clear input
+                    transaction.set(studentDocRef, newLogData);
+                    currentStudentData = newLogData; // Update local state
                 });
+                
+                showStatus(`Quiz submitted! You scored ${score} points. Total score updated.`, false);
+                updateProfileUI(currentStudentData); // Ensure profile score is updated
+                quizModal.classList.add('hidden');
+
             } catch (error) {
-                console.error("Score logging transaction failed:", error);
-                showStatus(error.message || "Score logging failed. Please check input and try again.", true);
+                console.error("Quiz score transaction failed:", error);
+                showStatus(`Quiz score submission failed: ${error.message || error}`, true);
             }
         }
 
 
-        // 4. Leaderboard Listener
+        // --- UI UPDATES ---
+
+        // Update the profile card based on the user's role and data
+        function updateProfileUI(data) {
+            if (!data) {
+                // Logged out / Not Registered state
+                profileCardEl.classList.add('hidden');
+                registrationCardEl.classList.remove('hidden');
+                adminActionsBlock.classList.add('hidden'); // Hide admin controls
+                return;
+            }
+            
+            registrationCardEl.classList.add('hidden');
+            profileCardEl.classList.remove('hidden');
+
+            document.getElementById('display-student-id').textContent = data.studentId;
+            document.getElementById('display-roll-class').innerHTML = `
+                Role: <span class="text-indigo-600 font-extrabold">${data.role.toUpperCase()}</span> | 
+                Score: <span class="text-pink-600 font-extrabold">${data.totalScore}</span> | 
+                Streak: <span class="text-green-600 font-extrabold">${data.streak} days</span>
+            `;
+
+            // Adjust buttons based on role
+            if (data.role === 'admin') {
+                document.getElementById('profile-title').textContent = 'Admin Console';
+                actionBtn.textContent = 'Log Student Score (Manual)';
+                actionBtn.onclick = () => scoreModal.classList.remove('hidden');
+                actionBtn.classList.remove('bg-yellow-500');
+                actionBtn.classList.add('bg-red-500');
+                checkInBtn.classList.add('hidden'); 
+                adminActionsBlock.classList.remove('hidden'); // Show admin controls
+
+            } else {
+                document.getElementById('profile-title').textContent = 'My Profile';
+                actionBtn.textContent = 'Take Daily Quiz (Earn Score)';
+                actionBtn.onclick = () => { quizModal.classList.remove('hidden'); setupQuizSelection(); };
+                actionBtn.classList.add('bg-yellow-500');
+                actionBtn.classList.remove('bg-red-500');
+                checkInBtn.classList.remove('hidden');
+                adminActionsBlock.classList.add('hidden'); // Hide admin controls
+            }
+        }
+        
+        // Setup real-time listener for the leaderboard
         function setupLeaderboardListener() {
-            if (!db || !isAuthReady) return;
+            if (!db || !currentUserId) {
+                console.warn("Skipping leaderboard setup: Firebase not initialized or user not authenticated.");
+                // Return silently, the failure should have been caught in initializeFirebase()
+                return;
+            }
 
-            // Note: Firebase `orderBy` is often limited. We fetch all and sort client-side.
-            const q = query(getStudentCollectionRef());
-
+            const q = getStudentCollectionRef();
+            
             onSnapshot(q, (snapshot) => {
-                const students = [];
+                let students = [];
                 snapshot.forEach((doc) => {
-                    students.push(doc.data());
+                    const data = doc.data();
+                    if (data.role !== 'admin') {
+                         students.push(data);
+                    }
+                    // If the current user's data is updated, refresh local state and UI
+                    if (currentStudentData && data.studentId === currentStudentData.studentId) {
+                        currentStudentData = data;
+                        updateProfileUI(currentStudentData);
+                    }
                 });
 
-                // Client-side sorting: highest score first
-                students.sort((a, b) => b.totalScore - a.totalScore);
-                
+                // Sort by totalScore descending, then by streak descending
+                students.sort((a, b) => {
+                    if (b.totalScore !== a.totalScore) {
+                        return b.totalScore - a.totalScore;
+                    }
+                    return b.streak - a.streak;
+                });
+
                 renderLeaderboard(students);
+                
             }, (error) => {
-                console.error("Error reading leaderboard:", error);
-                showStatus("Could not fetch leaderboard data.", true);
+                console.error("Error reading leaderboard (onSnapshot failed):", error);
+                showStatus("Error loading leaderboard. Check Security Rules for Read permissions: " + error.message, true);
             });
         }
         
-        // --- UI RENDERING ---
-
-        function updateProfileUI(studentData) {
-            if (studentData) {
-                document.getElementById('display-student-id').textContent = studentData.studentId;
-                document.getElementById('display-roll-class').textContent = `Roll No: ${studentData.rollNo}, Class: ${studentData.className}`;
-
-                registrationCardEl.classList.add('hidden');
-                profileCardEl.classList.remove('hidden');
-            } else {
-                registrationCardEl.classList.remove('hidden');
-                profileCardEl.classList.add('hidden');
-            }
-        }
-
+        // Render the sorted leaderboard data
         function renderLeaderboard(students) {
-            const tbody = document.getElementById('leaderboard-body');
-            tbody.innerHTML = ''; // Clear existing rows
+            leaderboardBody.innerHTML = '';
+
+            if (students.length === 0) {
+                leaderboardBody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">No students registered yet.</td></tr>';
+                return;
+            }
 
             students.forEach((student, index) => {
-                const rank = index + 1;
-                let rankClass = 'text-gray-900';
-                
-                if (rank === 1) rankClass = 'text-yellow-600 font-extrabold';
-                else if (rank === 2) rankClass = 'text-gray-500 font-bold';
-                else if (rank === 3) rankClass = 'text-amber-700 font-semibold';
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition duration-150';
 
+                // Check for current user highlight
+                if (currentStudentData && student.studentId === currentStudentData.studentId) {
+                    row.classList.add('bg-yellow-50', 'font-bold');
+                }
 
-                const row = `
-                    <tr class="hover:bg-indigo-50/50 transition duration-100 ${rank % 2 !== 0 ? 'bg-gray-50' : 'bg-white'}">
-                        <td class="py-4 px-4 whitespace-nowrap text-sm ${rankClass}">${rank}</td>
-                        <td class="py-4 px-4 whitespace-nowrap text-sm text-gray-700 font-medium">${student.rollNo} / ${student.className}</td>
-                        <td class="py-4 px-4 whitespace-nowrap text-sm text-right font-extrabold text-indigo-800">${student.totalScore}</td>
-                        <td class="py-4 px-4 whitespace-nowrap text-sm text-center font-bold text-green-600">${student.streak}</td>
-                        <td class="py-4 px-4 whitespace-nowrap text-xs text-center text-gray-400">${student.lastCheckIn || 'N/A'}</td>
-                    </tr>
+                row.innerHTML = `
+                    <td class="py-3 px-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                    </td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-gray-700">
+                        ${student.studentId}
+                    </td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-right text-green-600 font-bold">
+                        ${student.totalScore}
+                    </td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-center text-pink-600">
+                        ${student.streak}
+                    </td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-center text-gray-500">
+                        ${student.lastCheckIn || 'N/A'}
+                    </td>
                 `;
-                tbody.innerHTML += row;
+                leaderboardBody.appendChild(row);
             });
         }
-        
+
         // --- EVENT LISTENERS ---
 
-        // 1. Registration Submission
         registrationForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const rollNo = document.getElementById('roll-no').value;
             const className = document.getElementById('class-name').value;
-            if (rollNo && className) {
-                registerStudent(rollNo, className);
-            }
+            registerStudent(rollNo, className);
         });
 
-        // 2. Check-in Button
         checkInBtn.addEventListener('click', handleCheckIn);
+        signOutBtn.addEventListener('click', handleSignOut);
+
+        // Admin Score Modal Listeners
+        closeModalBtn.addEventListener('click', () => scoreModal.classList.add('hidden'));
+        scoreForm.addEventListener('submit', handleScoreLog);
         
-        // 3. Score Modal Toggles
-        showScoreModalBtn.addEventListener('click', () => {
-            scoreModal.classList.remove('hidden');
+        // Quiz Tab Listeners
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
         });
-        closeModalBtn.addEventListener('click', () => {
-            scoreModal.classList.add('hidden');
+        backToSelectionBtn.addEventListener('click', setupQuizSelection);
+
+        // Student Quiz Modal Listeners
+        closeQuizModalBtn.addEventListener('click', () => quizModal.classList.add('hidden'));
+        nextQBtn.addEventListener('click', nextQuestion);
+        finishQuizBtn.addEventListener('click', handleQuizAttempt);
+        
+        // Admin Action Handlers (Penalty and Kick)
+        
+        let pendingAdminAction = null; // Stores the function to execute on confirmation
+        
+        penaltyBtn.addEventListener('click', () => {
+            adminActionTitle.textContent = "Confirm Penalty Application";
+            adminActionMessage.textContent = "Enter the Student ID to deduct 50 points from their total score.";
+            adminTargetIdInput.value = '';
+            adminActionModal.classList.remove('hidden');
+            pendingAdminAction = (id) => applyScoreChange(id, -50, "Penalty");
+        });
+
+        kickBtn.addEventListener('click', () => {
+            adminActionTitle.textContent = "Confirm Student Removal (Kick)";
+            adminActionMessage.textContent = "⚠️ WARNING: This permanently deletes the student's record and score. Enter the Student ID to confirm removal.";
+            adminTargetIdInput.value = '';
+            adminActionModal.classList.remove('hidden');
+            pendingAdminAction = kickStudent;
         });
         
-        // 4. Score Submission
-        scoreForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const dailyScore = document.getElementById('daily-score').value;
-            if (dailyScore) {
-                handleLogScore(dailyScore);
-                scoreModal.classList.add('hidden');
+        adminCancelBtn.addEventListener('click', () => {
+            adminActionModal.classList.add('hidden');
+            pendingAdminAction = null;
+        });
+        
+        adminConfirmBtn.addEventListener('click', () => {
+            const targetId = adminTargetIdInput.value.trim();
+            if (!targetId) {
+                showStatus("Please enter a valid Student ID.", true);
+                return;
+            }
+            if (pendingAdminAction) {
+                pendingAdminAction(targetId);
+                adminActionModal.classList.add('hidden');
             }
         });
 
-        // --- RUN APP ---
-        window.onload = () => {
-            initializeFirebase();
-            
-            // Set up a listener for the current user's data once auth is ready.
-            // This also kicks off the leaderboard listener.
-            const authCheckInterval = setInterval(() => {
-                if (isAuthReady) {
-                    clearInterval(authCheckInterval);
-                    // The leaderboard is public, so start listening immediately
-                    setupLeaderboardListener();
-                }
-            }, 500);
-        };
 
+        // Start the application
+        window.onload = initializeFirebase;
     </script>
-
 </body>
 </html>
