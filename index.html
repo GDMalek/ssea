@@ -34,20 +34,7 @@
         .quiz-option-btn.incorrect {
             @apply bg-red-500 text-white border-red-700 shadow-xl;
         }
-        /* Global Loading Overlay */
-        #global-loader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            z-index: 1000;
-        }
+        /* Spinner utility class */
         .spinner {
             border: 8px solid #f3f3f3;
             border-top: 8px solid #4f46e5;
@@ -64,13 +51,8 @@
 </head>
 <body class="p-4 md:p-8">
 
-    <!-- Global Loading Overlay -->
-    <div id="global-loader" class="flex">
-        <div class="spinner"></div>
-        <p class="mt-4 text-xl font-semibold text-indigo-600">Loading Application...</p>
-    </div>
-
-    <div id="app" class="max-w-7xl mx-auto hidden">
+    <!-- The main application container is now visible by default -->
+    <div id="app" class="max-w-7xl mx-auto">
         <!-- Header -->
         <header class="text-center py-6 mb-8 bg-white rounded-xl shadow-lg">
             <h1 class="text-4xl font-extrabold text-indigo-700">
@@ -79,10 +61,10 @@
             <p class="text-gray-500 mt-2">Student Score and Progress Tracker</p>
         </header>
 
-        <!-- Loading Indicator and Error Message -->
+        <!-- Status and Error Message Area -->
         <div id="status-message" class="text-center p-4 rounded-lg text-lg hidden" role="status"></div>
         <div id="security-warning" class="text-center p-4 rounded-lg text-lg bg-red-100 text-red-700 mb-6 hidden">
-            ⚠️ **CRITICAL WARNING:** If the app is stuck or actions fail, ensure your Firestore rules allow **authenticated users** to read/write to the **`/artifacts/{appId}/public/data/students`** collection.
+            ⚠️ **ADMIN/SECURITY WARNING:** If the app is stuck or actions fail, ensure your Firestore rules allow **authenticated users** to read/write to the **`/artifacts/{appId}/public/data/students`** collection.
         </div>
 
 
@@ -198,6 +180,7 @@
                             </tr>
                         </thead>
                         <tbody id="leaderboard-body" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="5" class="py-4 text-center text-gray-500">Loading leaderboard...</td></tr>
                             <!-- Leaderboard data will be inserted here -->
                         </tbody>
                     </table>
@@ -455,9 +438,13 @@
         
         let firebaseConfig;
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            firebaseConfig = JSON.parse(__firebase_config);
+            try {
+                 firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                 console.error("Failed to parse __firebase_config:", e);
+                 firebaseConfig = MANUAL_FIREBASE_CONFIG;
+            }
         } else {
-            // Use dummy config if not provided, though this will likely fail
             firebaseConfig = MANUAL_FIREBASE_CONFIG;
         }
 
@@ -476,10 +463,7 @@
         };
 
         // --- DOM ELEMENTS ---
-        const globalLoader = document.getElementById('global-loader');
-        const appContainer = document.getElementById('app');
         const statusMessageEl = document.getElementById('status-message');
-        const mainContentEl = document.getElementById('main-content');
         const securityWarningEl = document.getElementById('security-warning');
         const registrationCardEl = document.getElementById('registration-card');
         const profileCardEl = document.getElementById('profile-card');
@@ -498,15 +482,11 @@
         const quizLoadingMessage = document.getElementById('quiz-loading-message');
         const quizSelectionEl = document.getElementById('quiz-selection');
         const quizContainerEl = document.getElementById('quiz-container');
-        const quizQuestionEl = document.getElementById('quiz-question');
-        const quizOptionsEl = document.getElementById('quiz-options');
         const nextQBtn = document.getElementById('next-q-btn');
         const finishQuizBtn = document.getElementById('finish-quiz-btn');
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContentTheory = document.getElementById('tab-content-theory');
         const tabContentQuiz = document.getElementById('tab-content-quiz');
-        const theoryTopicTitle = document.getElementById('theory-topic-title');
-        const theoryContent = document.getElementById('theory-content');
         const backToSelectionBtn = document.getElementById('back-to-selection-btn');
         
         // Admin Action Elements
@@ -576,34 +556,27 @@
                 
                 // 3. Set up the Auth State Listener (Critical for permissions)
                 onAuthStateChanged(auth, (user) => {
-                    globalLoader.classList.add('hidden');
-                    appContainer.classList.remove('hidden');
-                    
                     if (user) {
                         currentUserId = user.uid;
                         // Now that auth is confirmed, initialize data listeners and UI
-                        mainContentEl.classList.remove('hidden');
                         setupLeaderboardListener();
                         // Reset UI to expect registration/sign-in until data is loaded
                         updateProfileUI(null); 
-                        showStatus("Connection successful. Ready to register/sign in.", false);
+                        showStatus("App Ready. Please register or sign in using a Roll Number.", false);
                     } else {
                         currentUserId = null;
                         currentStudentData = null;
                         updateProfileUI(null);
-                        mainContentEl.classList.remove('hidden');
                         showStatus("Signed out. Please register or sign in.", false);
                     }
                 });
 
             } catch (error) {
-                // Ensure loader hides even on failure so the user sees the error
-                globalLoader.classList.add('hidden');
-                appContainer.classList.remove('hidden');
                 console.error("Firebase Initialization/Authentication failed:", error);
-                showStatus(`CRITICAL ERROR: Failed to initialize Firebase or authenticate. Check console for details. Error: ${error.message}`, true);
+                // Fail gracefully and show a general error message
+                showStatus(`Failed to connect to the database. You can still try to register/sign in, but reads/writes may fail. Error: ${error.message}`, true);
                 
-                // Show registration form only as a fallback
+                // Ensure the registration screen is visible
                 registrationCardEl.classList.remove('hidden');
                 profileCardEl.classList.add('hidden');
             }
@@ -769,7 +742,7 @@
 
                     const newUpdateData = {
                         ...existingData,
-                        totalScore: newTotalScore,
+                        totalScore: Math.max(0, newTotalScore), // Score cannot go below 0
                         lastScoreLog: getDateKey(), // Log that a score action occurred
                     };
 
@@ -866,6 +839,11 @@
         }
 
         function setupQuizSelection() {
+            // Reset Quiz state
+            currentQuiz.questions = [];
+            currentQuiz.currentQuestionIndex = 0;
+            currentQuiz.score = 0;
+            
             // Hide everything except selection
             tabContentTheory.classList.add('hidden');
             quizContainerEl.classList.add('hidden');
@@ -891,10 +869,10 @@
         
         function showTopicDetails(topic) {
             // Set theory content
-            theoryTopicTitle.textContent = topic;
-            theoryContent.innerHTML = QUIZ_DATA[topic].theory;
+            document.getElementById('theory-topic-title').textContent = topic;
+            document.getElementById('theory-content').innerHTML = QUIZ_DATA[topic].theory;
             
-            // Allow user to click the Quiz tab
+            // Allow user to click the Quiz tab to start the quiz
             document.getElementById('tab-quiz').onclick = () => startQuiz(topic);
             
             // Switch to Theory view initially
@@ -936,24 +914,24 @@
                  btn.classList.add('border-transparent', 'text-gray-500');
              });
              tabContentTheory.classList.add('hidden');
-             tabContentQuiz.classList.add('hidden');
+             tabContentQuiz.classList.remove('hidden'); // This is the container for both selection and quiz
              
              // Activate selected tab
              if (tabName === 'theory') {
                  document.getElementById('tab-theory').classList.add('border-indigo-600', 'text-indigo-600');
                  tabContentTheory.classList.remove('hidden');
-                 tabContentQuiz.classList.remove('hidden'); // Keep quiz content container visible
                  quizSelectionEl.classList.add('hidden');
                  quizContainerEl.classList.add('hidden');
 
              } else if (tabName === 'quiz') {
                  document.getElementById('tab-quiz').classList.add('border-indigo-600', 'text-indigo-600');
-                 tabContentQuiz.classList.remove('hidden');
                  // Ensure we show the correct state (selection or ongoing quiz)
                  if (currentQuiz.questions.length > 0) {
                      quizContainerEl.classList.remove('hidden');
+                     quizSelectionEl.classList.add('hidden');
                  } else {
                      quizSelectionEl.classList.remove('hidden');
+                     quizContainerEl.classList.add('hidden');
                  }
              }
         }
@@ -964,11 +942,11 @@
             
             document.getElementById('current-q').textContent = index + 1;
             document.getElementById('progress-bar').style.width = `${((index) / currentQuiz.questions.length) * 100}%`;
-            quizQuestionEl.textContent = `${index + 1}. ${questionData.q}`;
-            quizOptionsEl.innerHTML = '';
+            document.getElementById('quiz-question').textContent = `${index + 1}. ${questionData.q}`;
+            document.getElementById('quiz-options').innerHTML = '';
             
-            nextQBtn.classList.add('hidden');
-            finishQuizBtn.classList.add('hidden');
+            document.getElementById('next-q-btn').classList.add('hidden');
+            document.getElementById('finish-quiz-btn').classList.add('hidden');
 
             const shuffledOptions = shuffle([...questionData.options]);
             
@@ -977,13 +955,13 @@
                 button.textContent = option;
                 button.className = 'quiz-option-btn';
                 button.onclick = () => selectOption(button, option, questionData.a);
-                quizOptionsEl.appendChild(button);
+                document.getElementById('quiz-options').appendChild(button);
             });
         }
         
         function selectOption(selectedButton, selectedAnswer, correctAnswer) {
             // Disable all buttons
-            Array.from(quizOptionsEl.children).forEach(btn => btn.disabled = true);
+            Array.from(document.getElementById('quiz-options').children).forEach(btn => btn.disabled = true);
             
             if (selectedAnswer === correctAnswer) {
                 selectedButton.classList.add('correct');
@@ -991,20 +969,25 @@
             } else {
                 selectedButton.classList.add('incorrect');
                 // Highlight correct answer if incorrect choice was made
-                Array.from(quizOptionsEl.children).find(btn => btn.textContent === correctAnswer).classList.add('correct');
+                Array.from(document.getElementById('quiz-options').children).find(btn => btn.textContent === correctAnswer).classList.add('correct');
             }
             
             const isLastQuestion = currentQuiz.currentQuestionIndex === currentQuiz.questions.length - 1;
 
             if (isLastQuestion) {
-                finishQuizBtn.classList.remove('hidden');
+                document.getElementById('finish-quiz-btn').classList.remove('hidden');
             } else {
-                nextQBtn.classList.remove('hidden');
+                document.getElementById('next-q-btn').classList.remove('hidden');
             }
         }
 
         function nextQuestion() {
             currentQuiz.currentQuestionIndex++;
+            // Update progress bar width for the next question's index display
+            const nextIndex = currentQuiz.currentQuestionIndex + 1;
+            const totalQuestions = currentQuiz.questions.length;
+            document.getElementById('progress-bar').style.width = `${((nextIndex - 1) / totalQuestions) * 100}%`;
+
             loadQuestion();
         }
 
